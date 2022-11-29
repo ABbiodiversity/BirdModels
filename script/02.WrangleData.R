@@ -1,4 +1,5 @@
 library(tidyverse) #basic data wrangling
+library(lubridate) #date wrangling
 library(downloader) #download files
 library(sf) #for spatial wrangling
 library(terra) #for spatial wrangling
@@ -13,6 +14,7 @@ load("data/wildtrax_data_2022-11-15.RData")
 #tidy column names between sensor types
 #tidy method data
 #add sensor type
+#wrangle date
 dat <- raw  %>% 
   data.frame() %>% 
   # mutate(project = ifelse(is.na(project), project_name, project),
@@ -21,20 +23,25 @@ dat <- raw  %>%
   # dplyr::select(-project_name, -species_code, -recording_date) %>% 
   separate(method, into=c("duration", "method"), remove=TRUE) %>% 
   mutate(duration = ifelse(!method %in% c("1SPM", "1SPT", "None"), method, duration),
-         method = ifelse(!method %in% c("1SPM", "1SPT", "None"), "None", method)) %>% 
+         method = ifelse(!method %in% c("1SPM", "1SPT", "None"), "None", method),
+         date = ymd_hms(date),
+         year = year(date)) %>% 
   left_join(projects %>% 
               rename(sensor = sensorId) %>% 
               dplyr::select(project, sensor))
 
-#3. Remove unstructured survey data----
+#3. Filter data----
+#remove unstructured
+#remove year = 1900
 dat.method <- dat %>% 
   mutate(durationMethod = ifelse(is.na(durationMethod), "ARU", durationMethod)) %>% 
   dplyr::filter(durationMethod!="UNKNOWN",
-                !(method=="None" & sensor=="ARU"))
+                !(method=="None" & sensor=="ARU"),
+                year!=1900)
 
 #4. Identify unique survey locations----
 visit <- dat.method %>% 
-  dplyr::select(organization, project, location, latitude, longitude, buffer) %>% 
+  dplyr::select(organization, project, location, latitude, longitude, buffer, year) %>% 
   unique() %>% 
   dplyr::filter(!is.na(latitude))
 
