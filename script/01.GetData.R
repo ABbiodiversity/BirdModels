@@ -460,6 +460,8 @@ location <- visit %>%
   dplyr::select(source, sensor, location, buffer, lat, lon, year, topsecret) %>% 
   unique()
 
+write.csv(location, "data/birds_ab_locations_V2.csv", row.names = FALSE)
+
 #G. SAVE!#############################
 save(location, visit, bird, file=file.path(rootabmi, "data/Harmonized.Rdata"))
   
