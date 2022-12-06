@@ -6,8 +6,6 @@
 
 #NOTES################################
 
-#TO DO: GET CALLING LAKE DATA#####
-
 #The "BAMProjects_WildTrax.csv" file is a list of all projects currently in WildTrax that can be used in ABMI models. This file should be updated for each iteration of in collaboration with Erin Bayne. Future versions of this spreadsheet can hopefully be derived by a combination of organization and a google form poll for consent from other organizations.
 
 #The "BAMProjects_WildTrax.csv" file also contains information on which ARU projects are processed for a single species or taxa and therefore those visits should only be used for models for the appropriate taxa. This file should be updated for each iteration of the national models in collaboration with Erin Bayne.
@@ -37,10 +35,13 @@ library(wildRtrax) #to download data from wildtrax
 library(data.table) #for binding lists into dataframes
 library(lubridate) #date wrangling
 library(auk) #eBird wrangling
+library(downloader) #download zipped provincial boundary shp
+library(sf) #shapefile wrangling
+library(terra) #raster wrangling
 
 #2. Set root path for data on google drive----
 
-rootabmi <- "G:/My Drive/ABMI/BirdModels/Data"
+rootabmi <- "G:/My Drive/ABMI/Projects/BirdModels/"
 
 #For access to the bam patch
 rootbam <- "G:/.shortcut-targets-by-id/0B1zm_qsix-gPbkpkNGxvaXV0RmM/BAM.SharedDrive/RshProjs/PopnStatus/NationalModelsV4.1/PointCount/"
@@ -88,11 +89,23 @@ for(i in 1:nrow(projects.wt)){
   
   #Do each sensor type separately because the reports have different columns and we need different things for each sensor type
   if(projects.wt$sensorId[i]=="ARU"){
-    dat.try <- try(wt_download_report(project_id = projects.wt$project_id[i], sensor_id = projects.wt$sensorId[i], weather_cols = F, report = "summary"))
+    
+    #Get summary report
+    report.try <- try(wt_download_report(project_id = projects$project_id[i], sensor_id = projects$sensorId[i], weather_cols = F, report = "summary"))
+    
+    #Get task report for ARU model
+    task.try <- try(wt_download_report(project_id = projects$project_id[i], sensor_id = projects$sensorId[i], weather_cols = F, report = "task"))
+    
+    if(class(report.try)=="data.frame"){
+      dat.try <- report.try %>% 
+        left_join(task.try)
+    }
   }
   
   if(projects.wt$sensorId[i]=="PC"){
+    
     dat.try <- try(wt_download_report(project_id = projects.wt$project_id[i], sensor_id = projects.wt$sensorId[i], weather_cols = F, report="report"))
+    
   }
   
   if(class(dat.try)=="data.frame"){
@@ -145,9 +158,8 @@ raw.wt <- rbindlist(dat.list, fill=TRUE) %>%
   mutate(project = ifelse(is.na(newname), project, newname)) %>% 
   dplyr::select(-newname)
 
-#7. Save date stamped data & project list----
-save(raw.wt, projects.wt, error.log, file=paste0(rootabmi, "/wildtrax_raw_", Sys.Date(), ".Rdata"))
-load(file.path(root, "wildtrax_raw_2022-11-29.Rdata"))
+#6. Save date stamped data & project list----
+save(raw.wt, projects.wt, error.log, file=paste0(rootabmi, "Data/wildtrax_raw_", Sys.Date(), ".Rdata"))
 
 #B. GET PATCH DATA###############################
 
@@ -157,43 +169,51 @@ raw.bam <- readRDS(file.path(rootbam, "pc_patch.rds"))
 #C. GET EBIRD DATA##########################
 
 #1. Set ebd path----
-auk_set_ebd_path(file.path(rootabmi, "ebd_CA_relOct-2022"), overwrite=TRUE)
+auk_set_ebd_path(file.path(rootabmi, "Data/ebd_CA-AB_relOct-2022"), overwrite=TRUE)
 
 #2. Define filters----
-filters <- auk_ebd("ebd_CA_relOct-2022.txt") %>% 
+filters <- auk_ebd(file="ebd_CA-AB_relOct-2022.txt") %>% 
   auk_protocol("Stationary") %>% 
   auk_duration(c(0, 10)) %>% 
   auk_complete()
 
 #3. Filter data----
 #select columns to keep
-filtered <- auk_filter(filters, file=file.path(root, "ebd_data_filtered.txt"), overwrite=TRUE,
+filtered <- auk_filter(filters, file=file.path(rootabmi, "Data/ebd_data_filtered.txt"), overwrite=TRUE,
                        keep = c("group identifier", "sampling_event_identifier", "scientific name", "common_name", "observation_count", "latitude", "longitude", "locality_type", "observation_date", "time_observations_started", "observer_id", "duration_minutes"))
 
 #D. HARMONIZE###############################
 
 #1. Set desired columns----
-colnms <- c("source", "project", "sensor", "singlesp", "location", "buffer", "lat", "lon", "year", "date", "observer", "duration", "distance", "species", "abundance")
+colnms <- c("source", "organization", "project", "sensor", "equipment", "singlesp", "location", "buffer", "lat", "lon", "year", "date", "observer", "duration", "distance", "species", "abundance", "isSeen", "isHeard")
 
 #2. Wrangle wildtrax data-----
 
+load(file.path(rootabmi, "data/wildtrax_raw_2022-12-05.Rdata"))
+
 #2a. A bit of prep----
 dat.wt <- raw.wt %>% 
-  rename(lat = latitude, lon = longitude, species = speciesCode, buffer = bufferRadius.m.) %>% 
+  rename(lat = latitude, lon = longitude, species = speciesCode, equipment = equipment_used) %>% 
   full_join(projects.wt %>% 
               rename(sensor = sensorId) %>% 
               dplyr::select(project_id, project, sensor)) %>% 
   mutate(source = "WildTrax", 
          date = ymd_hms(date),
-         year = year(date))
+         year = year(date),
+         buffer=ifelse(is.na(bufferRadius.m.), buffer, bufferRadius.m.)) %>% 
+  separate(buffer, into=c("buffer"), sep=" ", remove=TRUE) %>% 
+  mutate(buffer = as.numeric(ifelse(!buffer %in% c("50", "10000"), str_sub(buffer, -100, -2), buffer)),
+         buffer = ifelse(is.na(buffer), 0, buffer))
 
 #2b. Get the point count data----
 #wrangle distance and duration maximums
 #remove counts with unknown duration and distance
-pc.wt <- dat.wt %>% 
+pc.wt.meth <- dat.wt %>% 
   dplyr::filter(sensor=="PC",
                 durationMethod!="UNKNOWN",
                 distanceMethod!="UNKNOWN") %>% 
+  dplyr::select(durationMethod, distanceMethod) %>% 
+  unique() %>% 
   rowwise() %>% 
   mutate(durationMethod = ifelse(str_sub(durationMethod, -1, -1)=="+", str_sub(durationMethod, -100, -2), durationMethod),
          chardur = str_locate_all(durationMethod, "-"),
@@ -202,9 +222,14 @@ pc.wt <- dat.wt %>%
          chardis = str_locate_all(distanceMethod, "-"),
          chardismax = max(chardis),
          distance1 = str_sub(distanceMethod, chardismax+1, -2),
-         distance = ifelse(distance1 %in% c("AR", "IN"), Inf, as.numeric(distance1)),
-         singlesp = "n") %>% 
-  dplyr::select(colnms) %>% 
+         distance = ifelse(distance1 %in% c("AR", "IN"), Inf, as.numeric(distance1))) %>% 
+  dplyr::select(distanceMethod, durationMethod, distance, duration)
+
+pc.wt <- dat.wt %>% 
+  dplyr::filter(sensor=="PC") %>% 
+  mutate(singlesp = "n") %>% 
+  left_join(pc.wt.meth) %>% 
+  dplyr::select(all_of(colnms)) %>% 
   data.frame()
 
 #2c. Get the aru data----
@@ -212,14 +237,14 @@ pc.wt <- dat.wt %>%
 #wrangle duration
 #identify datasets that should only be used for single species
 
-ssp <- read.csv(file.path(root, "BAMProjects_WildTrax.csv")) %>% 
-  dplyr::filter(single.species=="y")
+ssp <- read.csv("data/ABMIProjects_WildTrax.csv") %>% 
+  dplyr::filter(ssp=="y")
 
 aru.wt <- dat.wt %>% 
   dplyr::filter(sensor=="ARU") %>% 
   mutate(singlesp = ifelse(project_id %in% ssp$project_id, "y", "n")) %>% 
   separate(method, into=c("duration", "method"), remove=TRUE) %>% 
-  mutate(duration = as.numeric(str_sub(duration, -100, -2)),
+  mutate(duration = as.numeric(str_sub(duration, -100, -2))/60,
          distance = Inf) %>% 
   group_by(source, project, sensor, singlesp, location, buffer, lat, lon, year, date, observer, duration, distance, species, abundance, individual_appearance_order) %>%
   mutate(first_tag = min(tag_start_s)) %>%
@@ -228,8 +253,9 @@ aru.wt <- dat.wt %>%
   dplyr::select(all_of(colnms))
 
 #2d. Replace TMTTs with predicted abundance----
-tmtt <- read.csv("C:/Users/Elly Knight/Documents/ABMI/Projects/TMTT/data/tmtt_predictions.csv") %>% 
+tmtt <- read.csv("C:/Users/Elly Knight/Documents/ABMI/Projects/TMTT/data/tmtt_predictions_mean.csv") %>% 
   rename(species = species_code)
+
 user <- read.csv("C:/Users/Elly Knight/Documents/ABMI/Projects/TMTT/data/app_user.csv") %>% 
   rename(observer = user_name) %>% 
   dplyr::select(observer, user_id)
@@ -238,8 +264,7 @@ tmtt.wt <- aru.wt %>%
   dplyr::filter(abundance=="TMTT") %>% 
   left_join(user) %>% 
   mutate(user_id = ifelse(is.na(user_id), observer, user_id))%>% 
-  mutate(boot = round(runif(max(row_number()), 1, 100)),
-         species = ifelse(species %in% tmtt$species, species, "species"),
+  mutate(species = ifelse(species %in% tmtt$species, species, "species"),
          user_id = as.integer(ifelse(user_id %in% tmtt$user_id, user_id, 0))) %>% 
   data.frame() %>% 
   left_join(tmtt) %>% 
@@ -249,23 +274,19 @@ tmtt.wt <- aru.wt %>%
 #2e. Put back together----
 use.wt <- aru.wt %>% 
   dplyr::filter(abundance!="TMTT") %>% 
-  rbind(tmtt.wt)
+  rbind(tmtt.wt) %>% 
+  rbind(pc.wt)
 
 #3. Wrangle BAM patch data----
 #wrangle distance and duration maximums
 #remove counts with odd duration method entries
 #replace all unknown dates (MN-BBATLAS, NEFBMP2012-19) with June 15 of 2012
-use.bam <- raw.bam %>% 
+bam.meth <- raw.bam %>% 
+  dplyr::select(distanceMethod, durationMethod) %>% 
+  unique() %>% 
   dplyr::filter(!durationMethod %in% c("", " during the 10 minutes.", " seemed to bring food then brooded; assume nestlings stil", " timeperiod C")) %>% 
   rowwise() %>% 
-  mutate(source = "BAM",
-         sensor = "PC",
-         singlesp = "n",
-         surveyDateTime = ifelse(visitDate=="", paste0("2012-06-15", surveyDateTime), surveyDateTime),
-         date = ymd_hms(surveyDateTime),
-         year = year(date),
-         observer = NA,
-         durationMethod = ifelse(str_sub(durationMethod, -1, -1)=="+", str_sub(durationMethod, -100, -2), durationMethod),
+  mutate(durationMethod = ifelse(str_sub(durationMethod, -1, -1)=="+", str_sub(durationMethod, -100, -2), durationMethod),
          chardur = str_locate_all(durationMethod, "-"),
          chardurmax = max(chardur),
          duration = as.numeric(str_sub(durationMethod, chardurmax+1, -4)),
@@ -273,8 +294,19 @@ use.bam <- raw.bam %>%
          chardismax = max(chardis),
          distance1 = str_sub(distanceMethod, chardismax+1, -2),
          distance = ifelse(distance1 %in% c("AR", "IN"), Inf, as.numeric(distance1))) %>% 
-  rename(buffer = bufferRadiusMeters, lat = latitude, lon = longitude) %>% 
-  data.frame() %>% 
+  dplyr::select(distanceMethod, durationMethod, distance, duration)
+
+use.bam <- raw.bam %>% 
+  mutate(source = "BAM",
+         sensor = "PC",
+         equipment = NA,
+         singlesp = "n",
+         date = ymd_hms(date),
+         year = year(date)) %>% 
+  rename(buffer = 'bufferRadius(m)', lat = latitude, lon = longitude, species=speciesCode) %>%
+  mutate(buffer = ifelse(is.na(buffer), 0, buffer)) %>% 
+  dplyr::filter(!is.na(date)) %>% 
+  left_join(bam.meth) %>% 
   dplyr::select(all_of(colnms))
 
 #5. Wrangle ebird data----
@@ -282,25 +314,34 @@ use.bam <- raw.bam %>%
 #Filter out hotspots
 #Replace common name with alpha code
 
-raw.ebd <- read_ebd("ebd_data_filtered.txt")
+raw.ebd <- read_ebd(file.path(rootabmi, "Data/ebd_data_filtered.txt"))
+
+tax.wt <- read.csv("data/lu_species.csv") %>% 
+  mutate(scientific_name = paste(species_genus, species_name)) %>% 
+  rename(species = species_code) %>% 
+  dplyr::select(scientific_name, species)
 
 use.ebd <- raw.ebd %>% 
-  dplyr::filter(locality_type=="") %>% 
+  dplyr::filter(locality_type=="H") %>% 
   mutate(source = "eBird",
+         organization = "eBird",
          project=NA,
          sensor="PC",
+         equipment=NA,
          singlesp="n",
          location=NA,
          buffer=0,
          date = ymd_hms(paste0(observation_date, time_observations_started)),
          year = year(date),
          distance = Inf,
-         abundance = as.numeric(ifelse(observation_count=="X", 1, observation_count))) %>% 
-  separate(state_code, into=c("country", "province")) %>% 
+         abundance = as.numeric(ifelse(observation_count=="X", 1, observation_count)),
+         isSeen = NA,
+         isHeard = NA) %>% 
   rename(lat = latitude,
          lon = longitude,
          observer = observer_id,
          duration = duration_minutes) %>% 
+  left_join(tax.wt) %>% 
   dplyr::select(all_of(colnms))
 
 #E. PUT TOGETHER############################
@@ -308,16 +349,186 @@ use.ebd <- raw.ebd %>%
 #1. Put everything together----
 use <- rbind(use.wt, use.bam, use.ebd)
 
-#2. Separate into visit and detection objects----
+#2. Clip by provincial boundaries & filter to AB----
 use.visit <- use %>% 
-  dplyr::select(year, province, route, stop, date)
+  dplyr::select(-species, -abundance, -isSeen, -isHeard) %>% 
+  unique() %>% 
+  dplyr::filter(!is.na(lon),
+                !is.na(lat))
 
-#3. Clip by provincial boundaries----
+#Download provincial boundaries shapefile
+temp <- tempfile()
+download("https://www12.statcan.gc.ca/census-recensement/2021/geo/sip-pis/boundary-limites/files-fichiers/lpr_000b21a_e.zip", temp)
+unzip(zipfile=temp, exdir=file.path(rootabmi, "Data"))
+unlink(temp)
 
-#4. Remove duplicates----
+#Filter to Alberta
+shp <- read_sf(file.path(rootabmi, "Data/lpr_000b21a_e.shp")) %>% 
+  dplyr::filter(PRNAME=="Alberta")
 
+#Create rasters (much faster than from polygon)
+r <- rast(ext(shp), resolution=1000, crs=crs(shp))
+ab <- rasterize(x=shp, y=r, field="PRNAME")
 
-#F. COMPARE############################
+#Extract raster value
+#Identify topsecret locations
+visit.ab <- use.visit %>% 
+  st_as_sf(coords=c("lon", "lat"), crs=4326) %>% 
+  st_transform(crs=crs(ab)) %>% 
+  vect() %>% 
+  extract(x=ab) %>% 
+  cbind(use.visit) %>% 
+  dplyr::filter(PRNAME=="Alberta") %>% 
+  dplyr::select(colnames(use.visit)) %>% 
+  mutate(topsecret = ifelse((buffer > 0 & organization=="ABMI"), 1, 0))
 
+#apply to bird data
+use.ab <- use %>% 
+  inner_join(visit.ab)
+
+#4. Remove duplicate surveys----
+
+#4a. Investigate----
+#Take out buffered locations
+visit.dup <- visit.ab %>% 
+  dplyr::filter(buffer==0) %>% 
+  mutate(latr = round(lat, 4),
+         lonr = round(lon, 4)) %>% 
+  group_by(date, latr, lonr) %>% 
+  summarize(n = n()) %>% 
+  ungroup() %>% 
+  dplyr::filter(n > 1) %>% 
+  left_join(visit.ab %>% 
+              mutate(latr = round(lat, 4),
+                     lonr = round(lon, 4)))
+#no eBird duplicates
+#some point count data entry errors, but really only 2 sources of duplicates:
+#1. JOSM points that have human & ARU data
+#2. Duplicate processing of recordings
+
+#4b. Identify JOSM points with human & ARU data----
+#Keep the ARU ones because frankly they're probably better data
+visit.josm <- visit.dup %>% 
+  dplyr::filter(project %in% c("JOSM ECCC Cause and Effect Monitoring for Landbirds 2013",
+                               "Oil Sands Monitoring CWS Prairie Region 2012",
+                               "Oil Sands Monitoring CWS Prairie Region 2013",
+                               "Oilsands Monitoring CWS Prairie Region 2014"))
+
+visit.josm.remove <- visit.josm %>% 
+  dplyr::filter(sensor=="PC")
+
+#4c. Identify recordings that have been processed twice----
+#Use recording with longer duration processing, random if processing is equal
+visit.duprec <- visit.dup %>% 
+  dplyr::filter(sensor=="ARU") %>% 
+  left_join(visit.ab %>% 
+              mutate(latr = round(lat, 4),
+                     lonr = round(lon, 4))) %>% 
+  group_by(date, lat, lon, location) %>% 
+  summarize(n=n(),
+            maxdur = max(duration),
+            mindur = min(duration)) %>% 
+  left_join(visit.ab)
+
+visit.mindur.remove <- visit.duprec %>% 
+  dplyr::filter(mindur!=maxdur,
+                duration==mindur)
+  
+set.seed(1234)
+visit.eqdur.remove <- visit.duprec %>% 
+  dplyr::filter(mindur==maxdur) %>% 
+  group_by(date, lat, lon, location) %>% 
+  sample_n(1) %>% 
+  ungroup() %>% 
+  left_join(visit.ab)
+
+#4d. Filter out duplicates from dataset----
+#remove surveys before 1993 (first year with substantial data)
+visit <- visit.ab %>% 
+  anti_join(visit.josm.remove) %>% 
+  anti_join(visit.mindur.remove) %>% 
+  anti_join(visit.eqdur.remove) %>% 
+  dplyr::filter(year >= 1993)
+
+bird <- use.ab %>% 
+  anti_join(visit.josm.remove) %>% 
+  anti_join(visit.mindur.remove) %>% 
+  anti_join(visit.eqdur.remove)
+
+#F. IDENTIFY LOCATIONS FOR COVARIATE EXTRACTION####
+location <- visit %>% 
+  dplyr::select(source, sensor, location, buffer, lat, lon, year, topsecret) %>% 
+  unique()
 
 #G. SAVE!#############################
+save(location, visit, bird, file=file.path(rootabmi, "data/Harmonized.Rdata"))
+  
+#H. COMPARE############################
+load(file.path(rootabmi, "data/ab-birds-all-2020-09-23.Rdata"))
+
+nrow(dd)
+nrow(visit)
+table(visit$source)
+dd.n <- data.frame(table(dd$PCODE)) %>% 
+  arrange(-Freq)
+visit.n <- data.frame(table(visit$project)) %>% 
+  arrange(-Freq)
+
+missing <- dd %>% 
+  rename(lat = Y, lon = X) %>% 
+  mutate(date = as.character(DATI),
+         latr = round(lat, 4),
+         lonr = round(lon, 4)) %>% 
+  dplyr::select(date, latr, lonr) %>% 
+  anti_join(visit %>% 
+               mutate(date = as.character(date),
+                      latr = round(lat, 4),
+                      lonr= round(lon, 4))) %>% 
+  dplyr::filter(!is.na(latr), 
+                !is.na(date)) %>% 
+  left_join(dd %>% 
+              rename(lat = Y, lon = X) %>% 
+              mutate(date = as.character(DATI),
+                     latr = round(lat, 4),
+                     lonr = round(lon, 4)))
+
+year <- data.frame(table(dd$YEAR)) %>% 
+  rename(year = Var1, dd.n = Freq) %>% 
+  full_join(data.frame(table(visit$year)) %>% 
+              rename(year = Var1, visit.n = Freq)) %>% 
+  mutate(dd.n=ifelse(is.na(dd.n), 0, dd.n),
+         visit.n=ifelse(is.na(visit.n), 0, visit.n)) %>% 
+  dplyr::filter(as.numeric(as.character(year)) >= 1993,
+                as.numeric(as.character(year)) <= 2022)
+
+ggplot(year) +
+  geom_point(aes(x=dd.n, y=visit.n, colour=year)) +
+  geom_abline(aes(intercept=0, slope=1)) +
+  xlab("# visits in previous dataset") +
+  ylab("# visits in current dataset")
+
+ggsave(filename="figs/datasetversionN.jpeg", width=6, height=4)
+
+#I. EXTRAS####
+#1. Peak at multiyear data----
+multiyear <- visit %>% 
+  dplyr::select(location, lat, lon, year) %>% 
+  unique() %>% 
+  group_by(location, lat, lon) %>% 
+  summarize(n=n()) %>% 
+  ungroup() %>% 
+  dplyr::filter(n > 1) %>% 
+  left_join(visit %>% 
+              dplyr::select(location, lat, lon, year) %>% 
+              unique())
+
+table(multiyear$n)
+
+ggplot(multiyear) +
+  geom_point(aes(x=lon, y=lat, colour=n)) +
+  scale_colour_viridis_c()
+
+#2. Plot all the visits----
+ggplot(location) +
+  geom_point(aes(x=lon, y=lat, colour=source)) +
+  facet_wrap(~sensor)
