@@ -6,13 +6,13 @@
 
 #NOTES################################
 
-#The "BAMProjects_WildTrax.csv" file is a list of all projects currently in WildTrax that can be used in ABMI models. This file should be updated for each iteration of in collaboration with Erin Bayne. Future versions of this spreadsheet can hopefully be derived by a combination of organization and a google form poll for consent from other organizations.
+#The "projectInstructions.csv" file is a list of all projects currently in WildTrax should not be used in ABMI models (instructions=="DO NOT USE"). This file should be updated for each iteration of in collaboration with Erin Bayne. Future versions of this spreadsheet can hopefully be derived by a combination of organization and a google form poll for consent from other organizations.
 
-#The "BAMProjects_WildTrax.csv" file also contains information on which ARU projects are processed for a single species or taxa and therefore those visits should only be used for models for the appropriate taxa. This file should be updated for each iteration of the national models in collaboration with Erin Bayne.
+#The "projectInstructions.csv" file also contains information on which ARU projects are processed for a single species or taxa (instructions=="DO NOT USE") and therefore those visits should only be used for models for the appropriate taxa. This file should be updated for each iteration of the national models in collaboration with Erin Bayne.
 
 #There are a handful of projects that are not downloading properly via wildRtrax. An issue is open on this. These projects are listed in the error.log object.
 
-#BAM patch was compiled by Melina Houle in BAM to include datasets that are not yet loaded into WildTrax. Future iterations of the national models should not need this patch, with the exception of the BBS data which is likely too large to ever be uploaded in WT.
+#Riverforks data is stored in the ABMI Oracle database and should be downloaded  using dBeaver. Use the UNRESTRICTED_ACCESS acount to ensure full retrieval of species at risk records. Contact Joan (qfang@ualberta.ca) for access information. This dataset will hopefully be incorporated into WildTrax in the future to avoid this step.
 
 #raw eBird data is downloaded from the eBird interface at https://ebird.org/data/download/ebd prior to wrangling with the "auk" package and will require a request for access. Use the custom download tool to download only the datasets for Canada and the US instead of the global dataset. Note you will also need the global sampling file to use the auk package for zero filling.
 
@@ -41,10 +41,7 @@ library(terra) #raster wrangling
 
 #2. Set root path for data on google drive----
 
-rootabmi <- "G:/My Drive/ABMI/Projects/BirdModels/"
-
-#For access to the bam patch
-rootbam <- "G:/.shortcut-targets-by-id/0B1zm_qsix-gPbkpkNGxvaXV0RmM/BAM.SharedDrive/RshProjs/PopnStatus/NationalModelsV4.1/PointCount/"
+root <- "G:/My Drive/ABMI/Projects/BirdModels/"
 
 #A. DOWNLOAD DATA FROM WILDTRAX#######################
 
@@ -65,24 +62,7 @@ projects <- data.frame(project = as.character(project.list$project),
                        tasks = as.numeric(project.list$tasks),
                        status = as.character(project.list$status))
 
-#3. Filter by list of projects we can use----
-#Fix names to match report
-project.names <- data.frame(project_id = c(325, 432, 856, 977, 978),
-                            newname = c("Tłı̨chǫ Winter Road CWS Northern Region 2019",
-                                        "Ts’udé Nilįné Tuyeta PA CWS Northern Region 2020",
-                                        "Ts’udé Nilįné Tuyeta PA CWS Northern Region 2021",
-                                        "Nááts'įhch'oh NPR 2018 CWS Northern Region",
-                                        "Nááts'įhch'oh NPR 2019 CWS Northern Region"))
-
-use <- read.csv(file.path("data/ABMIProjects_WildTrax.csv"))
-
-projects.wt <- projects %>% 
-  dplyr::filter(project_id %in% use$project_id) %>% 
-  left_join(project.names) %>% 
-  mutate(project = ifelse(is.na(newname), project, newname)) %>% 
-  dplyr::select(-newname)
-
-#4. Loop through projects to download data----
+#3. Loop through projects to download data----
 dat.list <- list()
 error.log <- data.frame()
 for(i in 1:nrow(projects.wt)){
@@ -98,13 +78,14 @@ for(i in 1:nrow(projects.wt)){
     
     if(class(report.try)=="data.frame"){
       dat.try <- report.try %>% 
-        left_join(task.try)
+        left_join(task.try  %>% 
+                    dplyr::select("organization", "project_name", "location", "recording_date", "longitude", "latitude", "method", "status", "observer", "observer_id", "equipment_used"))
     }
   }
   
   if(projects.wt$sensorId[i]=="PC"){
     
-    dat.try <- try(wt_download_report(project_id = projects.wt$project_id[i], sensor_id = projects.wt$sensorId[i], weather_cols = F, report="report"))
+    dat.try <- try(wt_download_report(project_id = projects$project_id[i], sensor_id = projects$sensorId[i], weather_cols = F, report="report"))
     
   }
   
@@ -115,61 +96,65 @@ for(i in 1:nrow(projects.wt)){
   #Log projects that error
   if(class(dat.try)!="data.frame"){
     error.log <- rbind(error.log, 
-                       projects.wt[i,])
+                       projects[i,])
     
   }
   
-  print(paste0("Finished dataset ", projects.wt$project[i], " : ", i, " of ", nrow(projects.wt), " projects"))
+  print(paste0("Finished dataset ", projects$project[i], " : ", i, " of ", nrow(projects.wt), " projects"))
   
 }
 
-#5. Collapse list----
-#standardize column names between sensor types
-#fix special character project names
-report.names <- data.frame(project=c("EdÃ©hzhÃ­e National Wildlife Area CWS Northern Region 2016",
-                                     "EdÃ©hzhÃ­e National Wildlife Area CWS Northern Region 2019",
-                                     "TÅ‚Ä±Ì¨chÇ« Winter Road CWS Northern Region 2019",
-                                     "Tsâ€™udÃ© NilÄ¯nÃ© Tuyeta PA CWS Northern Region 2020",
-                                     "ForÃªt Montmorency long-term bird survey 2000",
-                                     "RÃ©gularisation du Lac KÃ©nogami EIA 2001",
-                                     "Tsâ€™udÃ© NilÄ¯nÃ© Tuyeta PA CWS Northern Region 2021",
-                                     "NÃ¡Ã¡ts'Ä¯hch'oh NPR 2018 CWS Northern Region",
-                                     "NÃ¡Ã¡ts'Ä¯hch'oh NPR 2019 CWS Northern Region",
-                                     "EdÃ©hzhÃ­e National Wildlife Area CWS Northern Region 2021",
-                                     "Thaidene NÃ«nÃ© PA CWS Northern Region 2022"),
-                           newname=c("Edéhzhíe National Wildlife Area CWS Northern Region 2016",
-                                     "Edéhzhíe National Wildlife Area CWS Northern Region 2019",
-                                     "Tchicho Winter Road CWS Northern Region 2019",
-                                     "Ts’udé Niliné Tuyeta PA CWS Northern Region 2020",
-                                     "Forêt Montmorency long-term bird survey 2000",
-                                     "Régularisation du Lac Kénogami EIA 2001",
-                                     "Ts’udé Niliné Tuyeta PA CWS Northern Region 2021",
-                                     "Nááts'ihch'oh NPR 2018 CWS Northern Region",
-                                     "Nááts'ihch'oh NPR 2019 CWS Northern Region",
-                                     "Edéhzhíe National Wildlife Area CWS Northern Region 2021",
-                                     "Thaidene Nëné PA CWS Northern Region 2022"))
+#4. Go download error projects from wildtrax.ca----
 
-raw.wt <- rbindlist(dat.list, fill=TRUE) %>%
+#5. Read in error projects----
+error.files <- list.files(file.path(root, "Data", "WildTrax", "errorFiles"), full.names = TRUE)
+
+raw.error <- data.frame()
+for(i in 1:length(error.files)){
+  raw.error <- read.csv(error.files[i]) %>% 
+    rbind(raw.error)
+}
+
+#6. Collapse list----
+#standardize column names between sensor types
+
+all.wt <- rbindlist(dat.list, fill=TRUE)  %>% 
+  rbind(raw.error, fill=TRUE) %>% 
   mutate(project = ifelse(is.na(project), project_name, project),
          speciesCode = ifelse(is.na(speciesCode), species_code, speciesCode),
          date = ifelse(is.na(date), recording_date, date)) %>%
   dplyr::select(-project_name, -recording_date, -species_code) %>% 
-  left_join(report.names) %>% 
-  mutate(project = ifelse(is.na(newname), project, newname)) %>% 
-  dplyr::select(-newname)
+  left_join(projects %>% 
+              dplyr::rename(project_status = status))
 
-#6. Save date stamped data & project list----
-save(raw.wt, projects.wt, error.log, file=paste0(rootabmi, "Data/wildtrax_raw_", Sys.Date(), ".Rdata"))
+#7. Filter out projects that shouldn't be used----
+#nothing in BU training & all "DO NOT USE" projects in projectInventory file
+#filter out 'NONE' method ARU projects later after this field is parsed out
 
-#B. GET PATCH DATA###############################
+instructions <- read.csv(file.path(root, "Data", "projectInventory", "projectInstructions.csv"))
 
-#1. BAM patch----
-raw.bam <- readRDS(file.path(rootbam, "pc_patch.rds"))
+raw.wt <- all.wt %>% 
+  left_join(instructions) %>%
+  mutate(instruction = ifelse(is.na(instruction), "NO RESTRICTION", instruction)) %>% 
+  dplyr::filter(organization!="BU-TRAINING",
+                instruction!="DO NOT USE")
+
+#9. Save date stamped data & project list----
+save(raw.wt, projects.wt, error.log, file=paste0(root, "Data/wildtrax_raw_", Sys.Date(), ".Rdata"))
+
+#B. GET RIVERFORKS DATA#####################
+det.rf <- read.csv(file.path(root, "Data", "Riverforks", "M_RT_BIRD_COUNT_202301161601.csv"), header=TRUE)
+loc.rf <- read.csv(file.path(root, "Data", "Riverforks", "A_RT_SITE_PHYCHAR_202301161554.csv"), header=TRUE)
+raw.rf <- det.rf %>%
+  mutate(SITE = as.character(SITE)) %>% 
+  left_join(loc.rf %>% 
+              dplyr::select(ROTATION, SITE, YEAR, SITE_LATITUDE, SITE_LONGITUDE) %>% 
+              unique())
 
 #C. GET EBIRD DATA##########################
 
 #1. Set ebd path----
-auk_set_ebd_path(file.path(rootabmi, "Data/ebd_CA-AB_relOct-2022"), overwrite=TRUE)
+auk_set_ebd_path(file.path(root, "Data/ebd_CA-AB_relOct-2022"), overwrite=TRUE)
 
 #2. Define filters----
 filters <- auk_ebd(file="ebd_CA-AB_relOct-2022.txt") %>% 
@@ -179,21 +164,22 @@ filters <- auk_ebd(file="ebd_CA-AB_relOct-2022.txt") %>%
 
 #3. Filter data----
 #select columns to keep
-filtered <- auk_filter(filters, file=file.path(rootabmi, "Data/ebd_data_filtered.txt"), overwrite=TRUE,
+filtered <- auk_filter(filters, file=file.path(root, "Data/ebd_data_filtered.txt"), overwrite=TRUE,
                        keep = c("group identifier", "sampling_event_identifier", "scientific name", "common_name", "observation_count", "latitude", "longitude", "locality_type", "observation_date", "time_observations_started", "observer_id", "duration_minutes"))
 
 #D. HARMONIZE###############################
 
 #1. Set desired columns----
-colnms <- c("source", "organization", "project", "sensor", "equipment", "singlesp", "location", "buffer", "lat", "lon", "year", "date", "observer", "duration", "distance", "species", "abundance", "isSeen", "isHeard")
+colnms <- c("source", "organization", "project", "sensor", "tagMethod", "equipment", "location", "buffer", "lat", "lon", "year", "date", "observer", "duration", "distance", "species", "abundance", "isSeen", "isHeard")
 
 #2. Wrangle wildtrax data-----
 
-load(file.path(rootabmi, "data/wildtrax_raw_2022-12-05.Rdata"))
+load(file.path(root, "data/wildtrax_raw_2022-12-05.Rdata"))
 
 #2a. A bit of prep----
 dat.wt <- raw.wt %>% 
-  rename(lat = latitude, lon = longitude, species = speciesCode, equipment = equipment_used) %>% 
+  dplyr::select(-observer) %>% 
+  rename(lat = latitude, lon = longitude, species = speciesCode, equipment = equipment_used, observer=observer_id) %>% 
   full_join(projects.wt %>% 
               rename(sensor = sensorId) %>% 
               dplyr::select(project_id, project, sensor)) %>% 
@@ -227,7 +213,8 @@ pc.wt.meth <- dat.wt %>%
 
 pc.wt <- dat.wt %>% 
   dplyr::filter(sensor=="PC") %>% 
-  mutate(singlesp = "n") %>% 
+  mutate(tagMethod = ifelse(distanceMethod=="0m-INF-ARU", "1SPT", "PC"),
+         equipment = "Human") %>% 
   left_join(pc.wt.meth) %>% 
   dplyr::select(all_of(colnms)) %>% 
   data.frame()
@@ -235,99 +222,108 @@ pc.wt <- dat.wt %>%
 #2c. Get the aru data----
 #filter ARU data to first detection of each individual
 #wrangle duration
-#identify datasets that should only be used for single species
-
-ssp <- read.csv("data/ABMIProjects_WildTrax.csv") %>% 
-  dplyr::filter(ssp=="y")
+#remove 'NONE' method
+#wrangle equipment type
+aru.wt.equip <- dat.wt %>% 
+  dplyr::filter(sensor=="ARU",
+                !is.na(equipment)) %>% 
+  dplyr::select(equipment) %>% 
+  unique() %>% 
+  rowwise() %>% 
+  mutate(equipmentend = str_locate(equipment, "\\("),
+         equipmentlong = str_sub(equipment, 1, equipmentend[,1]-1),
+         equipmentshort = case_when(equipmentlong=="?+" ~ "unknown",
+                                    str_detect(equipmentlong, "SM2")==TRUE ~ "SM2",
+                                    str_detect(equipmentlong, "SM3")==TRUE ~ "SM3",
+                                    str_detect(equipmentlong, "SM4")==TRUE ~ "SM4",
+                                    str_detect(equipmentlong, "mini")==TRUE ~ "mini",
+                                    str_detect(equipmentlong, "Mini")==TRUE ~ "mini",
+                                    is.na(equipmentlong) ~ "unknown"))
 
 aru.wt <- dat.wt %>% 
   dplyr::filter(sensor=="ARU") %>% 
-  mutate(singlesp = ifelse(project_id %in% ssp$project_id, "y", "n")) %>% 
-  separate(method, into=c("duration", "method"), remove=TRUE) %>% 
+  separate(method, into=c("duration", "tagMethod"), remove=TRUE) %>% 
+  dplyr::filter(tagMethod %in% c("1SPM", "1SPT")) %>% 
   mutate(duration = as.numeric(str_sub(duration, -100, -2))/60,
          distance = Inf) %>% 
-  group_by(source, project, sensor, singlesp, location, buffer, lat, lon, year, date, observer, duration, distance, species, abundance, individual_appearance_order) %>%
+  group_by(source, organization, project, sensor, tagMethod, equipment, location, buffer, lat, lon, year, date, observer, duration, distance, species, abundance, isSeen, isHeard, individual_appearance_order) %>%
   mutate(first_tag = min(tag_start_s)) %>%
   ungroup() %>%
   dplyr::filter(tag_start_s == first_tag) %>% 
+  left_join(aru.wt.equip) %>% 
+  dplyr::mutate(equipment = ifelse(is.na(equipmentshort), "unknown", equipmentshort),
+                isSeen = "f",
+                isHeard = "t") %>% 
   dplyr::select(all_of(colnms))
 
 #2d. Replace TMTTs with predicted abundance----
-tmtt <- read.csv("C:/Users/Elly Knight/Documents/ABMI/Projects/TMTT/data/tmtt_predictions_mean.csv") %>% 
+tmtt <- read.csv("C:/Users/Elly Knight/Documents/ABMI/Projects/WildTrax/TMTT/data/tmtt_predictions_mean.csv") %>% 
   rename(species = species_code)
 
-user <- read.csv("C:/Users/Elly Knight/Documents/ABMI/Projects/TMTT/data/app_user.csv") %>% 
-  rename(observer = user_name) %>% 
-  dplyr::select(observer, user_id)
-
 tmtt.wt <- aru.wt %>% 
-  dplyr::filter(abundance=="TMTT") %>% 
-  left_join(user) %>% 
-  mutate(user_id = ifelse(is.na(user_id), observer, user_id))%>% 
+  dplyr::filter(abundance=="TMTT") %>%
   mutate(species = ifelse(species %in% tmtt$species, species, "species"),
-         user_id = as.integer(ifelse(user_id %in% tmtt$user_id, user_id, 0))) %>% 
+         observer_id = as.integer(ifelse(observer %in% tmtt$observer_id, observer, 0))) %>% 
   data.frame() %>% 
   left_join(tmtt) %>% 
   mutate(abundance = round(pred)) %>% 
   dplyr::select(colnames(aru.wt))
 
 #2e. Put back together----
+#summarize abundance
 use.wt <- aru.wt %>% 
   dplyr::filter(abundance!="TMTT") %>% 
   rbind(tmtt.wt) %>% 
   rbind(pc.wt)
-
-#3. Wrangle BAM patch data----
-#wrangle distance and duration maximums
-#remove counts with odd duration method entries
-#replace all unknown dates (MN-BBATLAS, NEFBMP2012-19) with June 15 of 2012
-bam.meth <- raw.bam %>% 
-  dplyr::select(distanceMethod, durationMethod) %>% 
+  
+#3. Wrangle Riverforks data----
+tax.wt <- read.csv(file.path(root, "Data", "lookups", "lu_species.csv")) %>% 
+  mutate(SCIENTIFIC_NAME = paste(species_genus, species_name)) %>% 
+  rename(species = species_code, COMMON_NAME = species_common_name) %>% 
+  dplyr::select(COMMON_NAME, SCIENTIFIC_NAME, species) %>% 
   unique() %>% 
-  dplyr::filter(!durationMethod %in% c("", " during the 10 minutes.", " seemed to bring food then brooded; assume nestlings stil", " timeperiod C")) %>% 
-  rowwise() %>% 
-  mutate(durationMethod = ifelse(str_sub(durationMethod, -1, -1)=="+", str_sub(durationMethod, -100, -2), durationMethod),
-         chardur = str_locate_all(durationMethod, "-"),
-         chardurmax = max(chardur),
-         duration = as.numeric(str_sub(durationMethod, chardurmax+1, -4)),
-         chardis = str_locate_all(distanceMethod, "-"),
-         chardismax = max(chardis),
-         distance1 = str_sub(distanceMethod, chardismax+1, -2),
-         distance = ifelse(distance1 %in% c("AR", "IN"), Inf, as.numeric(distance1))) %>% 
-  dplyr::select(distanceMethod, durationMethod, distance, duration)
+  dplyr::filter(nchar(species)==4)
 
-use.bam <- raw.bam %>% 
-  mutate(source = "BAM",
-         sensor = "PC",
-         equipment = NA,
-         singlesp = "n",
-         date = ymd_hms(date),
-         year = year(date)) %>% 
-  rename(buffer = 'bufferRadius(m)', lat = latitude, lon = longitude, species=speciesCode) %>%
-  mutate(buffer = ifelse(is.na(buffer), 0, buffer)) %>% 
-  dplyr::filter(!is.na(date)) %>% 
-  left_join(bam.meth) %>% 
+use.rf <- raw.rf %>% 
+  rename(location=SITE, lat = SITE_LATITUDE, lon = SITE_LONGITUDE, year = YEAR, observer = ANALYST) %>% 
+  mutate(source = "riverforks",
+         organization="ABMI",
+         project="ABMI-Riverforks",
+         sensor="ARU",
+         tagMethod = "1SPM",
+         equipment="riverforks",
+         buffer = 5500,
+         duration = 3,
+         distance = Inf,
+         abundance = 1,
+         date = ymd_hm(paste0(ADATE, " ", TBB_START_TIME)),
+         isSeen = "f",
+         isHeard = "t") %>% 
+  left_join(tax.wt) %>% 
   dplyr::select(all_of(colnms))
 
-#5. Wrangle ebird data----
+#4. Wrangle ebird data----
 #Note this assumes observations with "X" individuals are 1s
 #Filter out hotspots
 #Replace common name with alpha code
 
-raw.ebd <- read_ebd(file.path(rootabmi, "Data/ebd_data_filtered.txt"))
+raw.ebd <- read_ebd(file.path(root, "Data", "ebd", "ebd_data_filtered.txt"))
 
-tax.wt <- read.csv("data/lu_species.csv") %>% 
+tax.wt <- read.csv(file.path(root, "Data", "lookups", "lu_species.csv")) %>% 
   mutate(scientific_name = paste(species_genus, species_name)) %>% 
-  rename(species = species_code) %>% 
-  dplyr::select(scientific_name, species)
+  rename(species = species_code, common_name = species_common_name) %>% 
+  dplyr::select(scientific_name, common_name, species) %>% 
+  unique() %>% 
+  dplyr::filter(nchar(species)==4)
 
 use.ebd <- raw.ebd %>% 
-  dplyr::filter(locality_type=="H") %>% 
+  dplyr::filter(locality_type!="H") %>% 
   mutate(source = "eBird",
          organization = "eBird",
          project=NA,
          sensor="PC",
-         equipment=NA,
+         tagMethod="PC",
+         equipment="human",
          singlesp="n",
          location=NA,
          buffer=0,
@@ -347,7 +343,7 @@ use.ebd <- raw.ebd %>%
 #E. PUT TOGETHER############################
 
 #1. Put everything together----
-use <- rbind(use.wt, use.bam, use.ebd)
+use <- rbind(use.wt, use.rf, use.ebd)
 
 #2. Clip by provincial boundaries & filter to AB----
 use.visit <- use %>% 
@@ -359,11 +355,11 @@ use.visit <- use %>%
 #Download provincial boundaries shapefile
 temp <- tempfile()
 download("https://www12.statcan.gc.ca/census-recensement/2021/geo/sip-pis/boundary-limites/files-fichiers/lpr_000b21a_e.zip", temp)
-unzip(zipfile=temp, exdir=file.path(rootabmi, "Data"))
+unzip(zipfile=temp, exdir=file.path(root, "Data", "gis"))
 unlink(temp)
 
 #Filter to Alberta
-shp <- read_sf(file.path(rootabmi, "Data/lpr_000b21a_e.shp")) %>% 
+shp <- read_sf(file.path(root, "Data", "gis", "lpr_000b21a_e.shp")) %>% 
   dplyr::filter(PRNAME=="Alberta")
 
 #Create rasters (much faster than from polygon)
@@ -460,13 +456,14 @@ location <- visit %>%
   dplyr::select(source, sensor, location, buffer, lat, lon, year, topsecret) %>% 
   unique()
 
-write.csv(location, "data/birds_ab_locations_V2.csv", row.names = FALSE)
+write.csv(location, file.path(root, "Data", "gis", "birds_ab_locations_V2.csv"), row.names = FALSE)
 
 #G. SAVE!#############################
-save(location, visit, bird, file=file.path(rootabmi, "data/Harmonized.Rdata"))
+save(location, visit, bird, file=file.path(root, "Data", "Harmonized.Rdata"))
   
 #H. COMPARE############################
-load(file.path(rootabmi, "data/ab-birds-all-2020-09-23.Rdata"))
+load(file.path(root, "data/ab-birds-all-2020-09-23.Rdata"))
+load(file.path(root, "data/Harmonized.Rdata"))
 
 nrow(dd)
 nrow(visit)
@@ -509,7 +506,27 @@ ggplot(year) +
   xlab("# visits in previous dataset") +
   ylab("# visits in current dataset")
 
-ggsave(filename="figs/datasetversionN.jpeg", width=6, height=4)
+ggsave(filename=file.path(root, "Figures", "datasetversionN.jpeg"), width=6, height=4)
+
+proj.dd <- dd %>% 
+  dplyr::filter(YEAR %in% c(2012:2017)) %>% 
+  group_by(PCODE, YEAR) %>% 
+  summarize(n=n()) %>% 
+  ungroup() %>% 
+  pivot_wider(values_from=n, names_from="YEAR", names_prefix="Year", names_sort=TRUE) %>% 
+  arrange(PCODE)
+
+write.csv(proj.dd, "data/PreviousVersionProjects2012-2017.csv", row.names=FALSE)
+
+proj.visit <- visit %>% 
+  dplyr::filter(year %in% c(2012:2017)) %>% 
+  group_by(organization, project, year) %>% 
+  summarize(n=n()) %>% 
+  ungroup() %>% 
+  pivot_wider(values_from=n, names_from="year", names_prefix="Year", names_sort=TRUE) %>% 
+  arrange(organization, project)
+
+write.csv(proj.visit, "data/CurrentVersionProjects2012-2017.csv", row.names=FALSE)
 
 #I. EXTRAS####
 #1. Peak at multiyear data----
@@ -534,3 +551,5 @@ ggplot(multiyear) +
 ggplot(location) +
   geom_point(aes(x=lon, y=lat, colour=source)) +
   facet_wrap(~sensor)
+
+ggsave(filename=file.path(root, "Figures", "Locations.jpeg"), width=6, height=4)
