@@ -65,10 +65,10 @@ projects <- data.frame(project = as.character(project.list$project),
 #3. Loop through projects to download data----
 dat.list <- list()
 error.log <- data.frame()
-for(i in 1:nrow(projects.wt)){
+for(i in 1:nrow(projects)){
   
   #Do each sensor type separately because the reports have different columns and we need different things for each sensor type
-  if(projects.wt$sensorId[i]=="ARU"){
+  if(projects$sensorId[i]=="ARU"){
     
     #Get summary report
     report.try <- try(wt_download_report(project_id = projects$project_id[i], sensor_id = projects$sensorId[i], weather_cols = F, report = "summary"))
@@ -83,7 +83,7 @@ for(i in 1:nrow(projects.wt)){
     }
   }
   
-  if(projects.wt$sensorId[i]=="PC"){
+  if(projects$sensorId[i]=="PC"){
     
     dat.try <- try(wt_download_report(project_id = projects$project_id[i], sensor_id = projects$sensorId[i], weather_cols = F, report="report"))
     
@@ -100,7 +100,7 @@ for(i in 1:nrow(projects.wt)){
     
   }
   
-  print(paste0("Finished dataset ", projects$project[i], " : ", i, " of ", nrow(projects.wt), " projects"))
+  print(paste0("Finished dataset ", projects$project[i], " : ", i, " of ", nrow(projects), " projects"))
   
 }
 
@@ -140,7 +140,7 @@ raw.wt <- all.wt %>%
                 instruction!="DO NOT USE")
 
 #9. Save date stamped data & project list----
-save(raw.wt, projects.wt, error.log, file=paste0(root, "Data/wildtrax_raw_", Sys.Date(), ".Rdata"))
+save(raw.wt, projects, error.log, file=paste0(root, "Data/wildtrax_raw_", Sys.Date(), ".Rdata"))
 
 #B. GET RIVERFORKS DATA#####################
 det.rf <- read.csv(file.path(root, "Data", "Riverforks", "M_RT_BIRD_COUNT_202301161601.csv"), header=TRUE)
@@ -180,7 +180,7 @@ load(file.path(root, "data/wildtrax_raw_2022-12-05.Rdata"))
 dat.wt <- raw.wt %>% 
   dplyr::select(-observer) %>% 
   rename(lat = latitude, lon = longitude, species = speciesCode, equipment = equipment_used, observer=observer_id) %>% 
-  full_join(projects.wt %>% 
+  full_join(projects %>% 
               rename(sensor = sensorId) %>% 
               dplyr::select(project_id, project, sensor)) %>% 
   mutate(source = "WildTrax", 
