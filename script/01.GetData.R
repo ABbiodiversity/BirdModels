@@ -322,12 +322,11 @@ use.ebd <- raw.ebd %>%
   dplyr::filter(locality_type!="H") %>% 
   mutate(source = "eBird",
          organization = "eBird",
-         project=NA,
+         project="eBird",
          sensor="PC",
          tagMethod="PC",
          equipment="human",
          singlesp="n",
-         location=NA,
          buffer=0,
          date = ymd_hms(paste0(observation_date, time_observations_started)),
          year = year(date),
@@ -338,7 +337,8 @@ use.ebd <- raw.ebd %>%
   rename(lat = latitude,
          lon = longitude,
          observer = observer_id,
-         duration = duration_minutes) %>% 
+         duration = duration_minutes,
+         location = checklist_id) %>% 
   left_join(tax.wt) %>% 
   dplyr::select(all_of(colnms))
 
@@ -369,7 +369,6 @@ r <- rast(ext(shp), resolution=1000, crs=crs(shp))
 ab <- rasterize(x=shp, y=r, field="PRNAME")
 
 #Extract raster value
-#Identify topsecret locations
 visit.ab <- use.visit %>% 
   st_as_sf(coords=c("lon", "lat"), crs=4326) %>% 
   st_transform(crs=crs(ab)) %>% 
@@ -377,8 +376,7 @@ visit.ab <- use.visit %>%
   extract(x=ab) %>% 
   cbind(use.visit) %>% 
   dplyr::filter(PRNAME=="Alberta") %>% 
-  dplyr::select(colnames(use.visit)) %>% 
-  mutate(topsecret = ifelse((buffer > 0 & organization=="ABMI"), 1, 0))
+  dplyr::select(colnames(use.visit))
 
 #apply to bird data
 use.ab <- use %>% 
@@ -389,7 +387,6 @@ use.ab <- use %>%
 #4a. Investigate----
 #Take out buffered locations
 visit.dup <- visit.ab %>% 
-  dplyr::filter(buffer==0) %>% 
   mutate(latr = round(lat, 4),
          lonr = round(lon, 4)) %>% 
   group_by(date, latr, lonr) %>% 
@@ -401,7 +398,7 @@ visit.dup <- visit.ab %>%
                      lonr = round(lon, 4)))
 #no eBird duplicates
 #some point count data entry errors, but really only 2 sources of duplicates:
-#1. JOSM points that have human & ARU data
+#1. JOSM points that have human & ARU data & eBird data
 #2. Duplicate processing of recordings
 
 #4b. Identify JOSM points with human & ARU data----
@@ -440,23 +437,116 @@ visit.eqdur.remove <- visit.duprec %>%
   ungroup() %>% 
   left_join(visit.ab)
 
-#4d. Filter out duplicates from dataset----
+#4d. Look at remaining duplicates----
+visit.dup2 <- visit.ab %>% 
+  anti_join(visit.josm.remove) %>% 
+  anti_join(visit.mindur.remove) %>% 
+  anti_join(visit.eqdur.remove) %>% 
+  mutate(latr = round(lat, 4),
+         lonr = round(lon, 4)) %>% 
+  group_by(date, latr, lonr) %>% 
+  summarize(n = n()) %>% 
+  ungroup() %>% 
+  dplyr::filter(n > 1) %>% 
+  left_join(visit.ab %>% 
+              mutate(latr = round(lat, 4),
+                     lonr = round(lon, 4)))
+
+#4e. Take out the ebird duplicates----
+visit.ebird.remove <- visit.dup2 %>% 
+  dplyr::filter(source=="eBird")
+
+#4f. Look at duplicates again----
+visit.dup3 <- visit.ab %>% 
+  anti_join(visit.josm.remove) %>% 
+  anti_join(visit.mindur.remove) %>% 
+  anti_join(visit.eqdur.remove) %>% 
+  anti_join(visit.ebird.remove) %>% 
+  mutate(latr = round(lat, 4),
+         lonr = round(lon, 4)) %>% 
+  group_by(date, latr, lonr) %>% 
+  summarize(n = n()) %>% 
+  ungroup() %>% 
+  dplyr::filter(n > 1) %>% 
+  left_join(visit.ab %>% 
+              mutate(latr = round(lat, 4),
+                     lonr = round(lon, 4)))
+
+set.seed(1234)
+visit.dup3.keep <- visit.dup3 %>% 
+  group_by(latr, lonr, date, n) %>% 
+  sample_n(1) %>% 
+  ungroup()
+
+visit.dup3.remove <- visit.dup3 %>% 
+  anti_join(visit.dup3.keep)
+
+#4g. Check again----
+visit.dup4 <- visit.ab %>% 
+  anti_join(visit.josm.remove) %>% 
+  anti_join(visit.mindur.remove) %>% 
+  anti_join(visit.eqdur.remove) %>% 
+  anti_join(visit.ebird.remove) %>% 
+  anti_join(visit.dup3.remove) %>% 
+  mutate(latr = round(lat, 4),
+         lonr = round(lon, 4)) %>% 
+  group_by(date, latr, lonr) %>% 
+  summarize(n = n()) %>% 
+  ungroup() %>% 
+  dplyr::filter(n > 1) %>% 
+  left_join(visit.ab %>% 
+              mutate(latr = round(lat, 4),
+                     lonr = round(lon, 4)))
+
+#4h. Filter out duplicates from dataset----
 #remove surveys before 1993 (first year with substantial data)
 visit <- visit.ab %>% 
   anti_join(visit.josm.remove) %>% 
   anti_join(visit.mindur.remove) %>% 
   anti_join(visit.eqdur.remove) %>% 
+  anti_join(visit.ebird.remove) %>% 
+  anti_join(visit.dup3.remove) %>% 
   dplyr::filter(year >= 1993)
 
 bird <- use.ab %>% 
   anti_join(visit.josm.remove) %>% 
   anti_join(visit.mindur.remove) %>% 
-  anti_join(visit.eqdur.remove)
+  anti_join(visit.eqdur.remove) %>% 
+  anti_join(visit.ebird.remove) %>% 
+  anti_join(visit.dup3.remove) %>% 
+  dplyr::filter(year >= 1993)
 
 #F. IDENTIFY LOCATIONS FOR COVARIATE EXTRACTION####
-location <- visit %>% 
-  dplyr::select(source, sensor, location, buffer, lat, lon, year, topsecret) %>% 
+
+#1. Identify projects with buffered locations----
+#Any project with buffer of 55000
+secret1 <- visit %>% 
+  dplyr::filter(organization=="ABMI", buffer==5500) %>% 
+  select(organization, project) %>% 
   unique()
+
+#projects that have the same lat lon for more than one location
+secret2 <- visit %>% 
+  dplyr::filter(organization=="ABMI") %>% 
+  dplyr::select(organization, project, location, lat, lon) %>% 
+  unique() %>% 
+  group_by(organization, project, lat, lon) %>% 
+  summarize(n=n()) %>% 
+  ungroup() %>% 
+  dplyr::filter(n > 1) %>% 
+  anti_join(secret1) %>% 
+  dplyr::select(organization, project) %>% 
+  unique()
+
+secret <- rbind(secret1, secret2) %>% 
+  mutate(topsecret = 1)
+
+#2. Filter to just unique combinations of year & location----
+location <- visit %>% 
+  dplyr::select(source, organization, sensor, project, buffer, location, lat, lon, year) %>% 
+  unique() %>% 
+  left_join(secret) %>% 
+  mutate(topsecret = ifelse(is.na(topsecret), 0, topsecret))
 
 write.csv(location, file.path(root, "Data", "gis", "birds_ab_locations.csv"), row.names = FALSE)
 
