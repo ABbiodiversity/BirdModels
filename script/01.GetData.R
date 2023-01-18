@@ -79,7 +79,7 @@ for(i in 1:nrow(projects)){
     if(class(report.try)=="data.frame"){
       dat.try <- report.try %>% 
         left_join(task.try  %>% 
-                    dplyr::select("organization", "project_name", "location", "recording_date", "longitude", "latitude", "method", "status", "observer", "observer_id", "equipment_used"))
+                    dplyr::select("organization", "project_name", "location", "recording_date", "longitude", "latitude", "method", "status", "observer", "observer_id", "equipment_used", "buffer"))
     }
   }
   
@@ -122,8 +122,9 @@ all.wt <- rbindlist(dat.list, fill=TRUE)  %>%
   rbind(raw.error, fill=TRUE) %>% 
   mutate(project = ifelse(is.na(project), project_name, project),
          speciesCode = ifelse(is.na(speciesCode), species_code, speciesCode),
-         date = ifelse(is.na(date), recording_date, date)) %>%
-  dplyr::select(-project_name, -recording_date, -species_code) %>% 
+         date = ifelse(is.na(date), recording_date, date),
+         buffer = ifelse(is.na(buffer), bufferRadius.m., buffer)) %>%
+  dplyr::select(-project_name, -recording_date, -species_code, -bufferRadius.m.) %>% 
   left_join(projects %>% 
               dplyr::rename(project_status = status))
 
@@ -140,18 +141,9 @@ raw.wt <- all.wt %>%
                 instruction!="DO NOT USE")
 
 #9. Save date stamped data & project list----
-save(raw.wt, projects, error.log, file=paste0(root, "Data/wildtrax_raw_", Sys.Date(), ".Rdata"))
+save(raw.wt, projects, error.log, file=paste0(root, "/Data/WildTrax/wildtrax_raw_", Sys.Date(), ".Rdata"))
 
-#B. GET RIVERFORKS DATA#####################
-det.rf <- read.csv(file.path(root, "Data", "Riverforks", "M_RT_BIRD_COUNT_202301161601.csv"), header=TRUE)
-loc.rf <- read.csv(file.path(root, "Data", "Riverforks", "A_RT_SITE_PHYCHAR_202301161554.csv"), header=TRUE)
-raw.rf <- det.rf %>%
-  mutate(SITE = as.character(SITE)) %>% 
-  left_join(loc.rf %>% 
-              dplyr::select(ROTATION, SITE, YEAR, SITE_LATITUDE, SITE_LONGITUDE) %>% 
-              unique())
-
-#C. GET EBIRD DATA##########################
+#B. GET EBIRD DATA##########################
 
 #1. Set ebd path----
 auk_set_ebd_path(file.path(root, "Data/ebd_CA-AB_relOct-2022"), overwrite=TRUE)
@@ -167,14 +159,14 @@ filters <- auk_ebd(file="ebd_CA-AB_relOct-2022.txt") %>%
 filtered <- auk_filter(filters, file=file.path(root, "Data/ebd_data_filtered.txt"), overwrite=TRUE,
                        keep = c("group identifier", "sampling_event_identifier", "scientific name", "common_name", "observation_count", "latitude", "longitude", "locality_type", "observation_date", "time_observations_started", "observer_id", "duration_minutes"))
 
-#D. HARMONIZE###############################
+#C. HARMONIZE###############################
 
 #1. Set desired columns----
 colnms <- c("source", "organization", "project", "sensor", "tagMethod", "equipment", "location", "buffer", "lat", "lon", "year", "date", "observer", "duration", "distance", "species", "abundance", "isSeen", "isHeard")
 
 #2. Wrangle wildtrax data-----
 
-load(file.path(root, "data/wildtrax_raw_2022-12-05.Rdata"))
+load(file.path(root, "Data", "WildTrax", "wildtrax_raw_2023-01-18.Rdata"))
 
 #2a. A bit of prep----
 dat.wt <- raw.wt %>% 
@@ -185,8 +177,7 @@ dat.wt <- raw.wt %>%
               dplyr::select(project_id, project, sensor)) %>% 
   mutate(source = "WildTrax", 
          date = ymd_hms(date),
-         year = year(date),
-         buffer=ifelse(is.na(bufferRadius.m.), buffer, bufferRadius.m.)) %>% 
+         year = year(date)) %>% 
   separate(buffer, into=c("buffer"), sep=" ", remove=TRUE) %>% 
   mutate(buffer = as.numeric(ifelse(!buffer %in% c("50", "10000"), str_sub(buffer, -100, -2), buffer)),
          buffer = ifelse(is.na(buffer), 0, buffer))
@@ -277,6 +268,16 @@ use.wt <- aru.wt %>%
   rbind(pc.wt)
   
 #3. Wrangle Riverforks data----
+
+#3a. Read it in-----
+det.rf <- read.csv(file.path(root, "Data", "Riverforks", "M_RT_BIRD_COUNT_202301161601.csv"), header=TRUE)
+loc.rf <- read.csv(file.path(root, "Data", "Riverforks", "A_RT_SITE_PHYCHAR_202301161554.csv"), header=TRUE)
+raw.rf <- det.rf %>%
+  mutate(SITE = as.character(SITE)) %>% 
+  left_join(loc.rf %>% 
+              dplyr::select(ROTATION, SITE, YEAR, SITE_LATITUDE, SITE_LONGITUDE) %>% 
+              unique())
+
 tax.wt <- read.csv(file.path(root, "Data", "lookups", "lu_species.csv")) %>% 
   mutate(SCIENTIFIC_NAME = paste(species_genus, species_name)) %>% 
   rename(species = species_code, COMMON_NAME = species_common_name) %>% 
@@ -284,6 +285,7 @@ tax.wt <- read.csv(file.path(root, "Data", "lookups", "lu_species.csv")) %>%
   unique() %>% 
   dplyr::filter(nchar(species)==4)
 
+#3b. Harmonize----
 use.rf <- raw.rf %>% 
   rename(location=SITE, lat = SITE_LATITUDE, lon = SITE_LONGITUDE, year = YEAR, observer = ANALYST) %>% 
   mutate(source = "riverforks",
@@ -456,7 +458,7 @@ location <- visit %>%
   dplyr::select(source, sensor, location, buffer, lat, lon, year, topsecret) %>% 
   unique()
 
-write.csv(location, file.path(root, "Data", "gis", "birds_ab_locations_V2.csv"), row.names = FALSE)
+write.csv(location, file.path(root, "Data", "gis", "birds_ab_locations.csv"), row.names = FALSE)
 
 #G. SAVE!#############################
 save(location, visit, bird, file=file.path(root, "Data", "Harmonized.Rdata"))
