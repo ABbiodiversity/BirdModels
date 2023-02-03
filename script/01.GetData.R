@@ -8,9 +8,9 @@
 
 #The "projectInstructions.csv" file is a list of all projects currently in WildTrax should not be used in ABMI models (instructions=="DO NOT USE"). This file should be updated for each iteration of in collaboration with Erin Bayne. Future versions of this spreadsheet can hopefully be derived by a combination of organization and a google form poll for consent from other organizations.
 
-#The "projectInstructions.csv" file also contains information on which ARU projects are processed for a single species or taxa (instructions=="DO NOT USE") and therefore those visits should only be used for models for the appropriate taxa. This file should be updated for each iteration of the national models in collaboration with Erin Bayne.
+#The "projectInstructions.csv" file also contains information on which ARU projects are processed for a single species or taxa (instructions=="DO NOT USE") and therefore those visits should only be used for models for the appropriate taxa. This file should be updated for each iteration of the national models in collaboration with Erin Bayne. These projects are currently not included in the models.
 
-#There are a handful of projects that are not downloading properly via wildRtrax. An issue is open on this. These projects are listed in the error.log object.
+#There are a handful of projects that are not downloading properly via wildRtrax. An issue is open on this. These projects are listed in the error.log object. These files should be downloaded manually.
 
 #Riverforks data is stored in the ABMI Oracle database and should be downloaded  using dBeaver. Use the UNRESTRICTED_ACCESS acount to ensure full retrieval of species at risk records. Contact Joan (qfang@ualberta.ca) for access information. This dataset will hopefully be incorporated into WildTrax in the future to avoid this step.
 
@@ -22,9 +22,9 @@
 
 #eBird data has not been zerofilled because there was no species filtering done and we are assuming that all stationary counts have at least 1 bird observed.
 
-#The column "sensor" currently only differentiates between ARU & human point count data types. Future versions should consider differentiating between SM2 ARU data types and other ARU data types due to differences in the perceptibility of these two approaches, either via QPAD or a correction factor.
-
 #The replace TMTTs script will be replaced by a wildRtrax function in the near future.
+
+#The location csv output of this script (line 582) should be sent to Eric for GIS covariate extraction. The output Eric provides will be used as input in the next script.
 
 #PREAMBLE############################
 
@@ -169,6 +169,7 @@ colnms <- c("source", "organization", "project", "sensor", "tagMethod", "equipme
 load(file.path(root, "Data", "WildTrax", "wildtrax_raw_2023-01-18.Rdata"))
 
 #2a. A bit of prep----
+#correct a few location names to match gis
 dat.wt <- raw.wt %>% 
   dplyr::select(-observer) %>% 
   rename(lat = latitude, lon = longitude, species = speciesCode, equipment = equipment_used, observer=observer_id) %>% 
@@ -180,7 +181,10 @@ dat.wt <- raw.wt %>%
          year = year(date)) %>% 
   separate(buffer, into=c("buffer"), sep=" ", remove=TRUE) %>% 
   mutate(buffer = as.numeric(ifelse(!buffer %in% c("50", "10000"), str_sub(buffer, -100, -2), buffer)),
-         buffer = ifelse(is.na(buffer), 0, buffer))
+         buffer = ifelse(is.na(buffer), 0, buffer),
+         location = case_when(str_sub(location, 1, 4)=="1577" ~ paste0("1577B", str_sub(location, 5, 100)),
+                              str_sub(location, 1, 7)=="OG-1600" ~ paste0("OG-ABMI-1600", str_sub(location, 8, 100)),
+                              !is.na(location) ~ location))
 
 #2b. Get the point count data----
 #wrangle distance and duration maximums
@@ -272,12 +276,17 @@ use.wt <- aru.wt %>%
 #3a. Read it in-----
 det.rf <- read.csv(file.path(root, "Data", "Riverforks", "M_RT_BIRD_COUNT_202301161601.csv"), header=TRUE)
 loc.rf <- read.csv(file.path(root, "Data", "Riverforks", "A_RT_SITE_PHYCHAR_202301161554.csv"), header=TRUE)
+
+#3b. Put together----
+#concatenate site name with point count # (there are 9 per site) before joining
 raw.rf <- det.rf %>%
-  mutate(SITE = as.character(SITE)) %>% 
+  mutate(SITE = paste0(SITE, "-", TBB_POINT_COUNT)) %>% 
   left_join(loc.rf %>% 
+              mutate(SITE = paste0(SITE, "-", TSFG_POINT_COUNT)) %>% 
               dplyr::select(ROTATION, SITE, YEAR, SITE_LATITUDE, SITE_LONGITUDE) %>% 
               unique())
 
+#3c. Get the taxonomy lookup----
 tax.wt <- read.csv(file.path(root, "Data", "lookups", "lu_species.csv")) %>% 
   mutate(SCIENTIFIC_NAME = paste(species_genus, species_name)) %>% 
   rename(species = species_code, COMMON_NAME = species_common_name) %>% 
@@ -285,7 +294,7 @@ tax.wt <- read.csv(file.path(root, "Data", "lookups", "lu_species.csv")) %>%
   unique() %>% 
   dplyr::filter(nchar(species)==4)
 
-#3b. Harmonize----
+#3d. Harmonize----
 use.rf <- raw.rf %>% 
   rename(location=SITE, lat = SITE_LATITUDE, lon = SITE_LONGITUDE, year = YEAR, observer = ANALYST) %>% 
   mutate(source = "riverforks",
@@ -382,9 +391,9 @@ visit.ab <- use.visit %>%
 use.ab <- use %>% 
   inner_join(visit.ab)
 
-#4. Remove duplicate surveys----
+#3. Remove duplicate surveys----
 
-#4a. Investigate----
+#3a. Investigate----
 #Take out buffered locations
 visit.dup <- visit.ab %>% 
   mutate(latr = round(lat, 4),
@@ -401,7 +410,7 @@ visit.dup <- visit.ab %>%
 #1. JOSM points that have human & ARU data & eBird data
 #2. Duplicate processing of recordings
 
-#4b. Identify JOSM points with human & ARU data----
+#3b. Identify JOSM points with human & ARU data----
 #Keep the ARU ones because frankly they're probably better data
 visit.josm <- visit.dup %>% 
   dplyr::filter(project %in% c("JOSM ECCC Cause and Effect Monitoring for Landbirds 2013",
@@ -412,7 +421,7 @@ visit.josm <- visit.dup %>%
 visit.josm.remove <- visit.josm %>% 
   dplyr::filter(sensor=="PC")
 
-#4c. Identify recordings that have been processed twice----
+#3c. Identify recordings that have been processed twice----
 #Use recording with longer duration processing, random if processing is equal
 visit.duprec <- visit.dup %>% 
   dplyr::filter(sensor=="ARU") %>% 
@@ -437,7 +446,7 @@ visit.eqdur.remove <- visit.duprec %>%
   ungroup() %>% 
   left_join(visit.ab)
 
-#4d. Look at remaining duplicates----
+#3d. Look at remaining duplicates----
 visit.dup2 <- visit.ab %>% 
   anti_join(visit.josm.remove) %>% 
   anti_join(visit.mindur.remove) %>% 
@@ -452,11 +461,11 @@ visit.dup2 <- visit.ab %>%
               mutate(latr = round(lat, 4),
                      lonr = round(lon, 4)))
 
-#4e. Take out the ebird duplicates----
+#3e. Take out the ebird duplicates----
 visit.ebird.remove <- visit.dup2 %>% 
   dplyr::filter(source=="eBird")
 
-#4f. Look at duplicates again----
+#3f. Look at duplicates again----
 visit.dup3 <- visit.ab %>% 
   anti_join(visit.josm.remove) %>% 
   anti_join(visit.mindur.remove) %>% 
@@ -481,7 +490,7 @@ visit.dup3.keep <- visit.dup3 %>%
 visit.dup3.remove <- visit.dup3 %>% 
   anti_join(visit.dup3.keep)
 
-#4g. Check again----
+#3g. Check again----
 visit.dup4 <- visit.ab %>% 
   anti_join(visit.josm.remove) %>% 
   anti_join(visit.mindur.remove) %>% 
@@ -498,15 +507,17 @@ visit.dup4 <- visit.ab %>%
               mutate(latr = round(lat, 4),
                      lonr = round(lon, 4)))
 
-#4h. Filter out duplicates from dataset----
+#3h. Filter out duplicates from dataset----
 #remove surveys before 1993 (first year with substantial data)
+#create unique ID
 visit <- visit.ab %>% 
   anti_join(visit.josm.remove) %>% 
   anti_join(visit.mindur.remove) %>% 
   anti_join(visit.eqdur.remove) %>% 
   anti_join(visit.ebird.remove) %>% 
   anti_join(visit.dup3.remove) %>% 
-  dplyr::filter(year >= 1993)
+  dplyr::filter(year >= 1993) %>% 
+  mutate(gisid = paste0(location, "_", year))
 
 bird <- use.ab %>% 
   anti_join(visit.josm.remove) %>% 
@@ -514,7 +525,8 @@ bird <- use.ab %>%
   anti_join(visit.eqdur.remove) %>% 
   anti_join(visit.ebird.remove) %>% 
   anti_join(visit.dup3.remove) %>% 
-  dplyr::filter(year >= 1993)
+  dplyr::filter(year >= 1993) %>% 
+  mutate(gisid = paste0(location, "_", year))
 
 #F. IDENTIFY LOCATIONS FOR COVARIATE EXTRACTION####
 
@@ -543,10 +555,28 @@ secret <- rbind(secret1, secret2) %>%
 
 #2. Filter to just unique combinations of year & location----
 location <- visit %>% 
-  dplyr::select(source, organization, sensor, project, buffer, location, lat, lon, year) %>% 
+  dplyr::select(gisid, source, organization, sensor, project, buffer, location, lat, lon, year) %>% 
   unique() %>% 
   left_join(secret) %>% 
   mutate(topsecret = ifelse(is.na(topsecret), 0, topsecret))
+
+#3. Check Riverforks for inconsistency with GIS data----
+gis <- read.csv(file.path(root, "Data", "gis", "topsecret_inventory.csv"))
+
+check <- location %>% 
+  dplyr::filter(topsecret==1,
+                project=="ABMI-Riverforks") %>% 
+  full_join(gis %>% 
+              rename(gisid = match_,
+                     year = year_) %>% 
+              dplyr::filter(gisid!=""))
+summary(check$NameFixed) #No NAs - good
+
+#4. Check that location name fixes worked----
+location.fix <- gis %>% 
+  dplyr::filter(NameFixed=="yes") %>% 
+  left_join(location)
+summary(location.fix$NameFixed) #No NAs - good
 
 write.csv(location, file.path(root, "Data", "gis", "birds_ab_locations.csv"), row.names = FALSE)
 
