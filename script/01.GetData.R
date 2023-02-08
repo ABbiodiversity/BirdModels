@@ -517,7 +517,8 @@ visit <- visit.ab %>%
   anti_join(visit.ebird.remove) %>% 
   anti_join(visit.dup3.remove) %>% 
   dplyr::filter(year >= 1993) %>% 
-  mutate(gisid = paste0(location, "_", year))
+  mutate(gisid = paste0(location, "_", year),
+         surveyid)
 
 bird <- use.ab %>% 
   anti_join(visit.josm.remove) %>% 
@@ -581,7 +582,7 @@ summary(location.fix$NameFixed) #No NAs - good
 write.csv(location, file.path(root, "Data", "gis", "birds_ab_locations.csv"), row.names = FALSE)
 
 #G. SAVE!#############################
-save(location, visit, bird, file=file.path(root, "Data", "Harmonized.Rdata"))
+save(location, visit, bird, file=file.path(root, "Data", "1Harmonized.Rdata"))
   
 #H. COMPARE############################
 load(file.path(root, "data/ab-birds-all-2020-09-23.Rdata"))
