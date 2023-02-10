@@ -48,3 +48,6 @@ figs/*
 
 # stupid OneDrive thing
 OneDrive*
+
+# test output
+out/*
