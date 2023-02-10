@@ -552,7 +552,11 @@ z$timer
 cat("Estimate for", ncol(YY), "species and", B, "runs is", ceiling(unname(ncol(YY)*B*z$timer[3])/(60*60)), "hrs\n")
 
 #10. Save out----
+#10a. Save to google drive for archive
 save(DAT, YY, OFF, OFFmean, SSH, BB, mods, file=file.path(root, "Data", "3Packaged-South.Rdata"))
+
+#10b. Save to local for compute canada
+save(DAT, YY, OFF, OFFmean, SSH, BB, mods, file=file.path("data", "3Packaged-South.Rdata"))
 
 #O. CREATE MODEL SUBSETS - NORTH####
 
@@ -606,4 +610,9 @@ z$timer
 cat("Estimate for", ncol(YY), "species and", B, "runs is", ceiling(unname(ncol(YY)*B*z$timer[3])/(60*60)), "hrs\n")
 
 #10. Save out-----
+
+#10a. Save to google drive for archive
 save(DAT, YY, OFF, OFFmean, SSH, BB, mods, file=file.path(root, "Data", "3Packaged-North.Rdata"))
+
+#10b. Save to local for compute canada
+save(DAT, YY, OFF, OFFmean, SSH, BB, mods, file=file.path("data", "3Packaged-North.Rdata"))
