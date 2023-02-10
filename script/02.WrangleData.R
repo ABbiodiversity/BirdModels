@@ -172,7 +172,9 @@ yy <- yy[,colnames(yy)!="NONE"]
 #create road column
 #create cmethod column
 dd <- visit %>% 
-  left_join(dcli) %>% 
+  left_join(dcli %>% 
+              dplyr::select(gisid, AHM, Eref, FFP, MAP, MAT, MCMT, MWMT, Populus_tremuloides_brtpred_nofp) %>% 
+              unique()) %>% 
   left_join(df.pt %>%
               dplyr::select(gisid, NRNAME, NSRNAME, LUF_NAME) %>% 
               unique()) %>% 
@@ -191,7 +193,7 @@ dd <- visit %>%
          pAspen = Populus_tremuloides_brtpred_nofp,
          PET = Eref)  %>% 
   mutate(DATE = as.Date(str_sub(as.character(DATI), 1, 10)),
-         ROAD = ifelse(PCODE %in% c("BAM-BBS-1987-2006", "BAM-BBS-2007-2022"), 1, 0),
+         ROAD = ifelse(PCODE %in% c("BAM-BBS-1987-2006", "BAM-BBS-2007-2022"), 1, NA),
          CMETHOD = case_when(TAGMETHOD=="PC" ~ "HS",
                              source=="riverforks" ~ "RF",
                              !is.na(TAGMETHOD) ~ "SM")) %>% 
