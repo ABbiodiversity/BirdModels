@@ -1,6 +1,6 @@
 ## --- settings ---
 ## file name for data bundle, need to be in /data/ dir
-fn <- "ab-birds-north-2020-09-23.RData"
+fn <- "data/3Packaged-North.RData"
 ## project name for storing the output
 PROJ <- "north"
 
@@ -10,7 +10,7 @@ CAICalpha <- 1
 MaxB <- 8*32 # 256
 
 ## test suite uses limited sets
-TEST <- FALSE
+TEST <- TRUE
 
 if (TEST) {
     MaxB <- 2
@@ -21,13 +21,13 @@ cat("* Loading packages and sourcing functions:")
 library(parallel)
 library(mefa4)
 library(opticut)
-source("~/repos/abmianalytics/birds/00-functions.R")
+source("script/00.functions.R")
 
-## Create an array from the NODESLIST environnement variable
+## Create an array from the NODESLIST environment variable
 if (interactive()) {
     nodeslist <- 2
     BBB <- 2
-    setwd("d:/abmi/AB_data_v2020/data/analysis/species/birds")
+    setwd("C:/Users/Elly Knight/Documents/ABMI/Projects/ABModels/BirdModels")
 } else {
     cat("OK\n* Getting nodes list ... ")
     nodeslist <- unlist(strsplit(Sys.getenv("NODESLIST"), split=" "))
@@ -43,26 +43,28 @@ if (interactive()) {
 cat("* Spawning workers...")
 cl <- makePSOCKcluster(nodeslist, type = "PSOCK")
 
+if (interactive()) tmpcl <- clusterEvalQ(cl, setwd("C:/Users/Elly Knight/Documents/ABMI/Projects/ABModels/BirdModels")) else tmpcl <- clusterEvalQ(cl, setwd("/home/ecknight/BirdModels"))
+
 cat("OK\n* Loading data on master ... ")
-load(file.path("data", fn))
+load(file.path(fn))
 
 cat("OK\nload packages on workers .. .")
 tmpcl <- clusterEvalQ(cl, library(mefa4))
+cat("Loaded mefa4\n")
 tmpcl <- clusterEvalQ(cl, library(opticut))
-tmpcl <- clusterEvalQ(cl, source("~/repos/abmianalytics/birds/00-functions.R"))
+cat("Loaded opticut\n")
 
 cat("OK\n* Exporting and data loading on workers ... ")
-tmpcl <- clusterExport(cl, "fn")
-if (interactive())
-    tmpcl <- clusterEvalQ(cl, setwd("d:/abmi/AB_data_v2018/data/analysis/birds"))
-#tmpcl <- clusterEvalQ(cl, load(file.path("data", fn)))
-clusterExport(cl, c("DAT", "YY", "OFF", "BB", "SSH", "OFFmean"))
+tmpcl <- clusterExport(cl, load(file.path(fn)))
+cat("Loaded data\n")
+
+tmpcl <- clusterEvalQ(cl, source("script/00.functions.R"))
+cat("Loaded functions\n")
 
 cat("OK\n* Establishing checkpoint ... ")
 SPP <- colnames(YY)
 DONE <- character(0)
-if (interactive() | TEST)
-    SPP <- SPP[1:2]
+if (interactive() | TEST) SPP <- SPP[1:2]
 
 DONE <- substr(list.files(paste0("out/", PROJ)), 1, 4)
 TOGO <- setdiff(SPP, DONE)
@@ -75,7 +77,6 @@ while (length(TOGO) > 0) {
     if (interactive())
         flush.console()
     t0 <- proc.time()
-    #z <- run_path1(1, "AMRO", mods, CAICalpha=1, wcol="vegw", ssh_class="vegc", ssh_fit="Space")
     if (interactive()) {
         res <- pblapply(cl=cl, X=1:BBB, FUN=run_path1,
             i=SPP1, mods=mods, CAICalpha=CAICalpha,
