@@ -46,7 +46,7 @@ root <- "G:/My Drive/ABMI/Projects/BirdModels/"
 #A. DOWNLOAD DATA FROM WILDTRAX#######################
 
 #1. Login to WildTrax----
-config <- "script/login.R"
+config <- "script/00.WTlogin.R"
 source(config)
 
 #1. Get list of projects from WildTrax----

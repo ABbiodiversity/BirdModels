@@ -513,7 +513,7 @@ NMIN <- 20
 B <- 256
 
 #2. Read in the models----
-source("script/models-soil.R")
+source("script/00.models-soil.R")
 setdiff(get_terms(mods_soil, "list"), colnames(dd))
 
 #3. Subset covariate object----
@@ -567,7 +567,7 @@ NMIN <- 20
 B <- 256
 
 #2. Read in the models----
-source("script/models-veg.R")
+source("script/00.models-veg.R")
 setdiff(get_terms(mods_veg, "list"), colnames(dd))
 
 #3. Subset covariate object----
