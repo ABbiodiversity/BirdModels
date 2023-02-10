@@ -1,0 +1,57 @@
+ID,UseInAnalysis,Sector,SectorFine,UseAvail,Description
+Cy,ClaySub,Native,Native,ClayLoamSand,clayey
+Len,Other,Native,Native,Other,Lentic
+LenS,Other,Native,Native,Other,Lentic: Seasonal
+LenSP,Other,Native,Native,Other,Lentic: semi permanent to permanent
+LenT,Other,Native,Native,Other,Lentic: Temporary
+LenW,Other,Native,Native,Other,Lentic: Permanent
+Li,RapidDrain,Native,Native,RapidDrain,Limy-Eroded  or immature soils with free lime (CaCO3) at the soil surface
+Lo,Loamy,Native,Native,ClayLoamSand,loamy
+Ltc,Other,Native,Native,Other,Lotic
+LtcC,Other,Native,Native,Other,Lotic: Coniferous
+LtcD,Other,Native,Native,Other,Lotic: Deciduous
+LtcH,Other,Native,Native,Other,Lotic- Herbaceous
+LtcS,Other,Native,Native,Other,Lotic: Shrub
+LtcR,Other,Native,Native,Other,Lotic: River
+Sb,ClaySub,Native,Native,ClayLoamSand,sub-irrigated: water table close to surface during growing season
+Sy,SandyLoam,Native,Native,ClayLoamSand,sandy-loam-textured soils; SandyLoam
+BdL,RapidDrain,Native,Native,RapidDrain,Badland/Bedrock
+CS,RapidDrain,Native,Native,RapidDrain,Choppy sandhills (Loamy sand and san soils with duned land surface)
+Gr,RapidDrain,Native,Native,RapidDrain,Gravel
+Sa,RapidDrain,Native,Native,RapidDrain,"Sand: Loams sand and sand soils, and not with a dune surface; LoamySand and Sand"
+SwG,RapidDrain,Native,Native,RapidDrain,Shallow to Gravel
+TB,ThinBreak,Native,Native,ThinBreak,Thin Breaks (Areas with bedrock at or near the soil surface)
+BlO,Blowout,Native,Native,Blowout,Blowouts/solonetzic
+LenA,Other,Native,Native,Other,Lentic Alkaline:poorly drained Saline Gleysolic soils
+Ov,Other,Native,Native,Other,"overflow; receive additional moisture from overland flow, non-saline chernozomic and regosolic soils"
+SL,Blowout,Native,Native,Blowout,Saline lowland
+UNK,SoilUnknown,Native,Native,EXCLUDE,Unknown soil
+Water,SoilWater,Native,Native,EXCLUDE,Undiffferentiated permananet water bodies including lakes 
+UrbanIndustrial,Urban,RuralUrban,Urban,UrbInd,
+UrbanResidence,Urban,RuralUrban,Urban,UrbInd,
+RuralResidentialIndustrial,Rural,RuralUrban,Rural,UrbInd,
+IndustrialSiteRural,Industrial,RuralUrban,Industrial,UrbInd,
+WindGenerationFacility,Industrial,Energy,Industrial,UrbInd,
+OtherDisturbedVegetation,Rural,RuralUrban,Rural,UrbInd,
+MineSite,Mine,Energy,Mine,UrbInd,
+PeatMine,Mine,Misc,Misc,UrbInd,
+WellSite,Well,Energy,Well,UrbInd,
+Pipeline,EnSoftLin,Energy,EnSoftLin,SoftLin,
+TransmissionLine,EnSoftLin,Energy,EnSoftLin,SoftLin,
+SeismicLineNarrow,EnSeismic,Energy,EnSeismic,SoftLin,
+SeismicLineWide,EnSeismic,Energy,EnSeismic,SoftLin,
+RoadHardSurface,HardLin,Transportation,HardLin,HardLin,
+RailHardSurface,HardLin,Transportation,HardLin,HardLin,
+RoadTrailVegetated,TrSoftLin,Transportation,TrSoftLin,SoftLin,
+RoadVegetatedVerge,TrSoftLin,Transportation,TrSoftLin,SoftLin,
+RailVegetatedVerge,TrSoftLin,Transportation,TrSoftLin,SoftLin,
+CultivationCrop,Crop,Agriculture,Crop,Crop,
+CultivationAbandoned,RoughP,Agriculture,RoughP,RoughP,
+CultivationRoughPasture,RoughP,Agriculture,RoughP,RoughP,
+CultivationTamePasture,TameP,Agriculture,TameP,TameP,
+HighDensityLivestockOperation,Industrial,Agriculture,Industrial,UrbInd,
+BorrowpitsDugoutsSumps,HWater,Misc,Misc,EXCLUDE,
+MunicipalWaterSewage,HWater,Misc,Misc,EXCLUDE,
+Reservoirs,HWater,Misc,Misc,EXCLUDE,
+Canals,HWater,Misc,Misc,EXCLUDE,
+CutBlocks,HFor,Forestry,Forestry,EXCLUDE,
