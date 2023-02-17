@@ -7,6 +7,8 @@
 #NOTES################################
 #The veghfsoil package will need to be downloaded from github to convert raw backfill GIS output to usable covariate data. See https://github.com/ABbiodiversity/veghfsoil.
 
+#This script formats data as per Solymos inputs and is separate from the package data script to retain Peter's workflow.
+
 #PREAMBLE############################
 
 #1. Load packages----
