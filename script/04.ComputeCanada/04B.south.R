@@ -10,7 +10,7 @@ CAICalpha <- 1
 MaxB <- 8*32 # 256
 
 ## test suite uses limited sets
-TEST <- TRUE
+TEST <- FALSE
 
 if (TEST) {
     MaxB <- 2
@@ -21,7 +21,7 @@ cat("* Loading packages and sourcing functions:")
 library(parallel)
 library(mefa4)
 library(opticut)
-source("script/00.functions.R")
+source("00.Functions.R")
 
 ## Create an array from the NODESLIST environment variable
 if (interactive()) {
@@ -43,7 +43,7 @@ if (interactive()) {
 cat("* Spawning workers...")
 cl <- makePSOCKcluster(nodeslist, type = "PSOCK")
 
-if (interactive()) tmpcl <- clusterEvalQ(cl, setwd("C:/Users/Elly Knight/Documents/ABMI/Projects/ABModels/BirdModels")) else tmpcl <- clusterEvalQ(cl, setwd("/home/ecknight/BirdModels"))
+if (interactive()) tmpcl <- clusterEvalQ(cl, setwd("C:/Users/Elly Knight/Documents/ABMI/Projects/ABModels/BirdModels")) else tmpcl <- clusterEvalQ(cl, setwd("/home/ecknight/ABMI-BirdModels"))
 
 cat("OK\n* Loading data on master ... ")
 load(file.path(fn))
@@ -58,7 +58,7 @@ cat("OK\n* Exporting and data loading on workers ... ")
 tmpcl <- clusterExport(cl, load(file.path(fn)))
 cat("Loaded data\n")
 
-tmpcl <- clusterEvalQ(cl, source("script/00.functions.R"))
+tmpcl <- clusterEvalQ(cl, source("00.Functions.R"))
 cat("Loaded functions\n")
 
 cat("OK\n* Establishing checkpoint ... ")
