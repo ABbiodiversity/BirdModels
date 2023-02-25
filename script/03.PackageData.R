@@ -105,9 +105,9 @@ dd <- data.frame(dd, vs0[rownames(dd),])
 
 #3. Read lookup tables----
 #3a. Vegetation
-tv0 <- read.csv("lookup/lookup-veg-hf-age-v61.csv")
+tv0 <- read.csv(file.path(root, "Data", "lookups", "lookup-veg-hf-age-v61.csv"))
 rownames(tv0) <- tv0[,1]
-tv <- read.csv("lookup/lookup-veg-hf-age-v2020.csv")
+tv <- read.csv(file.path(root, "Data", "lookups", "lookup-veg-hf-age-v2020.csv"))
 rownames(tv) <- tv[,1]
 tv0 <- tv0[rownames(tv),]
 tv <- data.frame(tv, tv0)
@@ -117,9 +117,9 @@ tv$UseInAnalysisNoAge[endsWith(tv$UseInAnalysisNoAge, "R")] <-
          nchar(tv$UseInAnalysisNoAge[endsWith(tv$UseInAnalysisNoAge, "R")])-1)
 
 #3b. Soil
-ts0 <- read.csv("lookup/lookup-soil-hf-v61.csv")
+ts0 <- read.csv(file.path(root, "Data", "lookups", "lookup-soil-hf-v61.csv"))
 rownames(ts0) <- ts0[,1]
-ts <- read.csv("lookup/lookup-soil-hf-v2020.csv")
+ts <- read.csv(file.path(root, "Data", "lookups", "lookup-soil-hf-v2020.csv"))
 rownames(ts) <- ts[,1]
 ts0 <- ts0[rownames(ts),]
 ts <- data.frame(ts, ts0)
@@ -556,7 +556,7 @@ cat("Estimate for", ncol(YY), "species and", B, "runs is", ceiling(unname(ncol(Y
 save(DAT, YY, OFF, OFFmean, SSH, BB, mods, file=file.path(root, "Data", "3Packaged-South.Rdata"))
 
 #10b. Save to local for compute canada
-save(DAT, YY, OFF, OFFmean, SSH, BB, mods, file=file.path("data", "3Packaged-South.Rdata"))
+save(DAT, YY, OFF, OFFmean, SSH, BB, mods, file=file.path("script", "04.ComputeCanada", "data", "3Packaged-South.Rdata"))
 
 #O. CREATE MODEL SUBSETS - NORTH####
 
@@ -592,7 +592,6 @@ OFFmean <- off_mean[rownames(DAT)]
 mods <- mods_veg
 SSH <- SSH_veg[rownames(DAT),]
 
-#7. Select data rows for each bootstrap----
 set.seed(1234)
 BB <- pbapply::pbsapply(1:B, bfun, DAT$SS, DAT$BLOCK_XYT)
 
@@ -615,4 +614,4 @@ cat("Estimate for", ncol(YY), "species and", B, "runs is", ceiling(unname(ncol(Y
 save(DAT, YY, OFF, OFFmean, SSH, BB, mods, file=file.path(root, "Data", "3Packaged-North.Rdata"))
 
 #10b. Save to local for compute canada
-save(DAT, YY, OFF, OFFmean, SSH, BB, mods, file=file.path("data", "3Packaged-North.Rdata"))
+save(DAT, YY, OFF, OFFmean, SSH, BB, mods, file=file.path("script", "04.ComputeCanada", "data", "3Packaged-North.Rdata"))
