@@ -18,13 +18,13 @@ library(lubridate) #date wrangling
 library(RSQLite) #read in GIS SQL data
 library(veghfsoil) #wrangle GIS data
 library(mefa4) #wrangle into previous data format
-library(QPAD) #get species list
 
 #2. Set root path for data on google drive----
 root <- "G:/My Drive/ABMI/Projects/BirdModels/"
 
 #3. Load harmonized set----
 load(file.path(root, "Data", "1Harmonized.Rdata"))
+load(file.path(root, "Data", "ab-birds-all-2020-09-23.Rdata"))
 
 #A. LOAD GIS EXTRACTION####
 
@@ -144,9 +144,8 @@ nrow(visit %>%
        dplyr::filter(n > 1))
 
 #4. Occurrence data (yy)----
-#get QPAD species list for filtering
-load_BAM_QPAD(4)
-spp <- getBAMspecieslist()
+#get species list for filtering
+spp <- e1$tax$code
 
 #summarize abundance per species per survey
 bird.yy <- bird %>% 
@@ -375,9 +374,6 @@ compare_sets(colnames(e1$sr2), colnames(sr2))
 compare_sets(rownames(dd), rownames(sr1))
 compare_sets(rownames(dd), rownames(sr2))
 
-#8. Add taxa table----
-tax <- e1$tax
-
-#9. Package and save----
+#8. Package and save----
 save(tax, yy, dd, vs0, vc1, vr1, sc1, sr1, vc2, vr2, sc2, sr2,
      file=file.path(root, "Data", "2Wrangled.Rdata"))
