@@ -6,7 +6,7 @@ PROJ <- "south"
 
 ## CAIC = alpha * AIC + (1 - alpha) * BIC, 1: AIC, 0: BIC
 CAICalpha <- 1
-## Number of bootstrap runs, 100 or 240
+## Number of bootstrap runs
 MaxB <- 8*32 # 256
 
 ## test suite uses limited sets
@@ -27,7 +27,7 @@ source("00.Functions.R")
 if (interactive()) {
   nodeslist <- 2
   BBB <- 2
-  setwd("C:/Users/Elly Knight/Documents/ABMI/Projects/ABModels/BirdModels")
+  setwd("C:/Users/Elly Knight/Documents/ABMI/Projects/ABModels/BirdModels/script/04.ComputeCanada")
 } else {
   cat("OK\n* Getting nodes list ... ")
   nodeslist <- unlist(strsplit(Sys.getenv("NODESLIST"), split=" "))
@@ -43,7 +43,7 @@ if (interactive()) {
 cat("* Spawning workers...")
 cl <- makePSOCKcluster(nodeslist, type = "PSOCK")
 
-if (interactive()) tmpcl <- clusterEvalQ(cl, setwd("C:/Users/Elly Knight/Documents/ABMI/Projects/ABModels/BirdModels")) else tmpcl <- clusterEvalQ(cl, setwd("/home/ecknight/ABMI-BirdModels"))
+if (interactive()) tmpcl <- clusterEvalQ(cl, setwd("C:/Users/Elly Knight/Documents/ABMI/Projects/ABModels/BirdModels/script/04.ComputeCanada")) else tmpcl <- clusterEvalQ(cl, setwd("/home/ecknight/ABMI-BirdModels"))
 
 cat("OK\n* Loading data on master ... ")
 load(file.path(fn))
@@ -64,7 +64,8 @@ cat("Loaded functions\n")
 cat("OK\n* Establishing checkpoint ... ")
 SPP <- colnames(YY)
 DONE <- character(0)
-if (interactive() | TEST) SPP <- SPP[1:2]
+if (interactive() | TEST)
+  SPP <- SPP[1:2]
 
 DONE <- substr(list.files(paste0("out/", PROJ)), 1, 4)
 TOGO <- setdiff(SPP, DONE)
@@ -99,7 +100,7 @@ while (length(TOGO) > 0) {
     cat("OK")
 }
 
-## Releaseing resources.
+## Releasing resources.
 cat("\n* Shutting down ... ")
 stopCluster(cl)
 cat("OK\nDONE!\n")
