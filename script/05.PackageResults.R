@@ -292,7 +292,7 @@ table(uu$show)
 
 uu$AUCn <- AUCNorth[match(uu$code, names(AUCNorth))]
 uu$AUCs <- AUCSouth[match(uu$code, names(AUCSouth))]
-uu$pocc <- colSums(yy[,rownames(uu)]) > 0
+uu$pocc <- colSums(yy[,rownames(uu)] > 0) 
 
 #put it together
 spb <- data.frame(
