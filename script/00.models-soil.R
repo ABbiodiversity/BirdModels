@@ -7,7 +7,7 @@ mods_soil <- list(
         .~. + ROAD + mWell,
         .~. + ROAD + mWell + mSoft),
     "ARU"=list(
-        .~. + SM2),
+        .~. + CMETHOD),
     "Water"=list(
         .~. + pWater_KM,
         .~. + pWater_KM + pWater2_KM),

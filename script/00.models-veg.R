@@ -29,7 +29,7 @@ mods_veg <- list(
         .~. + ROAD + mWell + mEnSft + mTrSft,
         .~. + ROAD + mWell + mEnSft + mTrSft + mSeism),
     "ARU"=list(
-        .~. + SM2),
+        .~. + CMETHOD),
     "Water"=list(
         .~. + pWater_KM,
         .~. + pWater_KM + pWater2_KM),
