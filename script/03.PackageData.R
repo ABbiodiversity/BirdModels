@@ -82,8 +82,7 @@ dd$TSSR <- (dd$start - dd$srise) / 24
 dd$JDAY2 <- dd$JDAY^2
 dd$TSSR2 <- dd$TSSR^2
 
-#4. Maximum counting distance in 100 m units (area in ha)----
-dd$MAXDIS <- dd$MAXDIS / 100
+#4. Maximum counting distance in 1m units----
 table(dd$MAXDIS)
 
 #C. SUBSET SPECIES DATA####
@@ -286,7 +285,7 @@ dd$wtAge05 <- sqrt(dd$wtAge)
 #G. FORESTRY CONVERGENCE####
 
 #1. fCC1: linear----
-MAXFOR <- 50/200
+MAXFOR <- 50/200 #Is this age when forestry converges with fire???
 dd$fCC1 <- 0
 dd$fCC1[dd$isCC==1] <- pmax(0, 1 - (dd$isCC * dd$wtAge/MAXFOR)[dd$isCC==1])
 plot(fCC1 ~ wtAge, dd[dd$isCC==1,])
@@ -413,7 +412,7 @@ SSH_soil <- sc2r[rownames(dd),]
 #L. QPAD OFFSETS####
 
 #1. Load version 4 of estimates----
-load_BAM_QPAD(version=4)
+load_BAM_QPAD(version=3)
 
 #2. Set WD to qpad-offsets package----
 root.qpad <- "C:/Users/Elly Knight/Documents/BAM/Projects/QPAD/qpad-offsets"
