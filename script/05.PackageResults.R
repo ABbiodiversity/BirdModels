@@ -53,8 +53,8 @@ row.names(bt) <- bt$code
 rm(ee)
 
 #7. Model species lists----
-SPPn <- substr(list.files(file.path(root, "out", "north")), 1, 4)
-SPPs <- substr(list.files(file.path(root, "out", "south")), 1, 4)
+SPPn <- substr(list.files(file.path(root, "out2023", "north")), 1, 4)
+SPPs <- substr(list.files(file.path(root, "out2023", "south")), 1, 4)
 
 #Add full common names
 names(SPPn) <- bt[SPPn, "sppid"]
@@ -79,7 +79,7 @@ SPPs <- SPPs[names(SPPs) %in% rownames(blist)[blist$show %in% c("c", "s")]]
 AUCNorth <- list()
 for (spp in SPPn) {
   cat(spp, "N\n");flush.console()
-  resn <- load_species(file.path(root, "out", "north", paste0(spp, ".RData")))
+  resn <- load_species(file.path(root, "out2023", "north", paste0(spp, ".RData")))
   yn <- as.numeric(en$YY[,spp])
   off <- if (spp %in% colnames(en$OFF))
     en$OFF[,spp] else en$OFFmean
@@ -96,7 +96,7 @@ load(file.path(root, "results", "BIRDS-North-AUC.RData"))
 AUCSouth <- list()
 for (spp in SPPs) {
     cat(spp, "N\n");flush.console()
-    ress <- load_species(file.path(root, "out", "south", paste0(spp, ".RData")))
+    ress <- load_species(file.path(root, "out2023", "south", paste0(spp, ".RData")))
     ys <- as.numeric(es$YY[,spp])
     off <- if (spp %in% colnames(es$OFF))
         es$OFF[,spp] else es$OFFmean
@@ -116,7 +116,7 @@ for (spp in SPPn) {
   cat(spp, "\n")
   flush.console()
   
-  res <- load_species(file.path(root, "out", "north", paste0(spp, ".RData")))
+  res <- load_species(file.path(root, "out2023", "north", paste0(spp, ".RData")))
   
   est1 <- suppressWarnings(get_coef(res, Xn, stage="ARU", na.out=FALSE))
   est2 <- suppressWarnings(get_coef(res, Xn, stage="Space", na.out=FALSE))
@@ -136,7 +136,7 @@ for (spp in SPPs) {
     cat(spp, "\n")
     flush.console()
 
-    res <- load_species(file.path(root, "out", "south", paste0(spp, ".RData")))
+    res <- load_species(file.path(root, "out2023", "south", paste0(spp, ".RData")))
     
     est1 <- suppressWarnings(get_coef(res, Xs, stage="ARU", na.out=FALSE))
     est2 <- suppressWarnings(get_coef(res, Xs, stage="Space", na.out=FALSE))
@@ -207,7 +207,6 @@ for (spp in names(cfn)) {
     cfnj <- rbind(log(cfn[[spp]]$coefSpace), t(cfn[[spp]]$estSpace[,cnb]))
   }
 
-  
   #Set reasonable values on estimates
   cfnm[cfnm > 10^4] <- 10^4
   cfnm[cfnm < -10^4] <- -10^4
