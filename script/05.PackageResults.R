@@ -53,8 +53,8 @@ row.names(bt) <- bt$code
 rm(ee)
 
 #7. Model species lists----
-SPPn <- substr(list.files(file.path(root, "out2023", "north")), 1, 4)
-SPPs <- substr(list.files(file.path(root, "out2023", "south")), 1, 4)
+SPPn <- substr(list.files(file.path(root, "Results", "CCOutput", "out2023-QPADV3", "north")), 1, 4)
+SPPs <- substr(list.files(file.path(root, "Results", "CCOutput", "out2023-QPADV3", "south")), 1, 4)
 
 #Add full common names
 names(SPPn) <- bt[SPPn, "sppid"]
@@ -79,7 +79,7 @@ SPPs <- SPPs[names(SPPs) %in% rownames(blist)[blist$show %in% c("c", "s")]]
 AUCNorth <- list()
 for (spp in SPPn) {
   cat(spp, "N\n");flush.console()
-  resn <- load_species(file.path(root, "out2023", "north", paste0(spp, ".RData")))
+  resn <- load_species(file.path(root, "Results", "CCOutput", "out2023-QPADV3", "north", paste0(spp, ".RData")))
   yn <- as.numeric(en$YY[,spp])
   off <- if (spp %in% colnames(en$OFF))
     en$OFF[,spp] else en$OFFmean
@@ -89,14 +89,14 @@ for (spp in SPPn) {
   AUCNorth[[spp]] <- aucn
 }
 AUCNorth <- unlist(AUCNorth)
-save(AUCNorth, file=file.path(root, "results", "BIRDS-North-AUC.RData"))
-load(file.path(root, "results", "BIRDS-North-AUC.RData"))
+save(AUCNorth, file=file.path(root, "Results", "BIRDS-North-QPADV3-AUC.RData"))
+load(file.path(root, "Results", "BIRDS-North-QPADV3-AUC.RData"))
 
 #South
 AUCSouth <- list()
 for (spp in SPPs) {
     cat(spp, "N\n");flush.console()
-    ress <- load_species(file.path(root, "out2023", "south", paste0(spp, ".RData")))
+    ress <- load_species(file.path(root, "Results", "CCOutput", "out2023-QPADV3", "south", paste0(spp, ".RData")))
     ys <- as.numeric(es$YY[,spp])
     off <- if (spp %in% colnames(es$OFF))
         es$OFF[,spp] else es$OFFmean
@@ -106,8 +106,8 @@ for (spp in SPPs) {
     AUCSouth[[spp]] <- aucs
 }
 AUCSouth <- unlist(AUCSouth)
-save(AUCSouth, file=file.path(root, "results", "BIRDS-South-AUC.RData"))
-load(file.path(root, "results", "BIRDS-South-AUC.RData"))
+save(AUCSouth, file=file.path(root, "Results", "BIRDS-South-QPADV3-AUC.RData"))
+load(file.path(root, "Results", "BIRDS-South-QPADV3-AUC.RData"))
 
 #10. Calculate coefficients---
 #North
@@ -116,7 +116,7 @@ for (spp in SPPn) {
   cat(spp, "\n")
   flush.console()
   
-  res <- load_species(file.path(root, "out2023", "north", paste0(spp, ".RData")))
+  res <- load_species(file.path(root, "Results", "CCOutput", "out2023-QPADV3", "north", paste0(spp, ".RData")))
   
   est1 <- suppressWarnings(get_coef(res, Xn, stage="ARU", na.out=FALSE))
   est2 <- suppressWarnings(get_coef(res, Xn, stage="Space", na.out=FALSE))
@@ -127,8 +127,8 @@ for (spp in SPPn) {
   
   cfn[[spp]] <- list(estARU=est1, estSpace=est2, coefARU=cf1, coefSpace=cf2)
 }
-save(cfn, file=file.path(root, "results", "BIRDS-North-coefs.RData"))
-load(file=file.path(root, "results", "BIRDS-North-coefs.RData"))
+save(cfn, file=file.path(root, "Results", "BIRDS-North-QPADV3-coefs.RData"))
+load(file=file.path(root, "Results", "BIRDS-North-QPADV3-coefs.RData"))
 
 #South
 cfs <- list()
@@ -136,7 +136,7 @@ for (spp in SPPs) {
     cat(spp, "\n")
     flush.console()
 
-    res <- load_species(file.path(root, "out2023", "south", paste0(spp, ".RData")))
+    res <- load_species(file.path(root, "Results", "CCOutput", "out2023-QPADV3", "south", paste0(spp, ".RData")))
     
     est1 <- suppressWarnings(get_coef(res, Xs, stage="ARU", na.out=FALSE))
     est2 <- suppressWarnings(get_coef(res, Xs, stage="Space", na.out=FALSE))
@@ -147,8 +147,8 @@ for (spp in SPPs) {
 
     cfs[[spp]] <- list(estARU=est1, estSpace=est2, coefARU=cf1, coefSpace=cf2)
 }
-save(cfs, file=file.path(root, "results", "BIRDS-South-coefs.RData"))
-load(file.path(root, "results", "BIRDS-South-coefs.RData"))
+save(cfs, file=file.path(root, "Results", "BIRDS-South-QPADV3-coefs.RData"))
+load(file.path(root, "Results", "BIRDS-South-QPADV3-coefs.RData"))
 
 #11. Align species lists----
 TAX <- read.csv(file.path(root, "Data", "lookups", "birdlist.csv"))
@@ -391,4 +391,4 @@ length(birds$south$marginal[1,1,])
 # length(birds$south$marginal[1,1,])
 
 #20. Write out----
-save(birds, file=file.path(root, "results", "Birds2023.RData"))
+save(birds, file=file.path(root, "Results", "Birds2023-QPADV3.RData"))
