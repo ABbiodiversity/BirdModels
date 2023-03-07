@@ -17,7 +17,7 @@ library(allinone) #previous results
 root <- "G:/My Drive/ABMI/Projects/BirdModels/"
 
 #3. Load 2023 coefficients----
-load(file.path(root, "results", "Birds2023.RData"))
+load(file.path(root, "results", "Birds2023-QPADV3.RData"))
 
 #4. Load 2022 coefficients----
 load(file.path(getOption("allinone")$dir, "COEFS.RData"))
@@ -57,7 +57,7 @@ ggsave(gridExtra::grid.arrange(auc.n, auc.s, ncol=2, nrow=1), filename = file.pa
 
 #2. Coefficients----
 
-#South
+#South####
 coef22.s <- rowMeans(COEFS$birds$south$joint, dims=2) %>%
   data.frame() %>%
   rownames_to_column("species") %>%
@@ -109,8 +109,56 @@ for(i in 1:length(cov.s)){
                                 cor = cor(coef.i$coef22, coef.i$coef23)))
 }
 
+#Correlation by species and covariate-----
+spp <- as.character(unlist(unique(dimnames(birds$south$joint))[[1]]))
+cov <- as.character(unlist(unique(dimnames(birds$south$joint))[[2]]))
+loop <- expand.grid(spp=spp, cov=cov, stringsAsFactors = FALSE, KEEP.OUT.ATTRS = FALSE) %>% 
+  dplyr::filter(spp %in% as.character(unlist(unique(dimnames(COEFS$birds$south$joint))[[1]])),
+                !cov %in% c("EnSeismic", "EnSoftLin", "TrSoftLin", "Wellsites"))
 
-#North
+t.s <- data.frame()
+for(i in 1:nrow(loop)){
+  
+  coef22.i <- COEFS$birds$south$joint[loop$spp[i],loop$cov[i],]
+  coef23.i <- birds$south$joint[loop$spp[i],loop$cov[i],1:100]
+  
+  t.i <- try(t.test(coef22.i, coef23.i), silent = TRUE)
+  
+  if(class(t.i)!="try-error"){
+    t.s <- rbind(t.s, data.frame(spp = loop$spp[i],
+                                 cov = loop$cov[i],
+                                 p = t.i$p.value,
+                                 t = t.i$statistic,
+                                 mean22 = mean(coef22.i),
+                                 mean23 = mean(coef23.i)) %>% 
+                   mutate(meand = mean22-mean23))
+  }
+  
+}
+
+t.s %>% 
+  dplyr::filter(p < 0.05) %>% 
+  group_by(cov) %>% 
+  summarize(n=n()) %>% 
+  ungroup() %>% 
+  arrange(-n) %>% 
+  View()
+
+ggplot(t.s %>% 
+         dplyr::filter(p < 0.05)) +
+  geom_boxplot(aes(x=cov, y=p)) +
+  theme(axis.text.x = element_text(angle=90))
+
+ggplot(t.s) +
+  geom_boxplot(aes(x=cov, y=log(meand))) +
+  theme(axis.text.x = element_text(angle=90))
+
+ggplot(t.s) +
+  geom_point(aes(x=mean22, y=mean23)) +
+  geom_abline(intercept=0, slope=1) +
+  facet_wrap(~cov, scales="free")
+
+#North####
 coef22.n <- rowMeans(COEFS$birds$north$joint, dims=2) %>%
   data.frame() %>%
   rownames_to_column("species") %>%
@@ -166,6 +214,60 @@ for(i in 1:length(cov.n)){
                      data.frame(covariate=cov.n[i],
                                 cor = cor(coef.i$coef22, coef.i$coef23)))
 }
+
+#Correlation by species and covariate-----
+spp <- as.character(unlist(unique(dimnames(birds$north$joint))[[1]]))
+cov <- as.character(unlist(unique(dimnames(birds$north$joint))[[2]]))
+loop <- expand.grid(spp=spp, cov=cov, stringsAsFactors = FALSE, KEEP.OUT.ATTRS = FALSE) %>% 
+  dplyr::filter(spp %in% as.character(unlist(unique(dimnames(COEFS$birds$north$joint))[[1]])),
+                !cov %in% c("EnSeismic", "EnSoftLin", "TrSoftLin", "Wellsites"))
+
+t.n <- data.frame()
+for(i in 1:nrow(loop)){
+  
+  coef22.i <- COEFS$birds$north$joint[loop$spp[i],loop$cov[i],]
+  coef23.i <- birds$north$joint[loop$spp[i],loop$cov[i],1:100]
+  
+  t.i <- try(t.test(coef22.i, coef23.i), silent = TRUE)
+  
+  if(class(t.i)!="try-error"){
+    t.n <- rbind(t.n, data.frame(spp = loop$spp[i],
+                                 cov = loop$cov[i],
+                                 p = t.i$p.value,
+                                 t = t.i$statistic,
+                                 mean22 = mean(coef22.i),
+                                 mean23 = mean(coef23.i)) %>% 
+                   mutate(meand = mean22-mean23))
+  }
+
+}
+
+t.n %>% 
+  dplyr::filter(p < 0.05) %>% 
+  group_by(cov) %>% 
+  summarize(n=n()) %>% 
+  ungroup() %>% 
+  arrange(-n) %>% 
+  View()
+
+ggplot(t.n %>% 
+         dplyr::filter(p < 0.05)) +
+  geom_boxplot(aes(x=cov, y=p)) +
+  theme(axis.text.x = element_text(angle=90))
+
+ggplot(t.n) +
+  geom_boxplot(aes(x=cov, y=log(meand))) +
+  theme(axis.text.x = element_text(angle=90))
+
+ggplot(t.n) +
+  geom_point(aes(x=mean22, y=mean23)) +
+  geom_abline(intercept=0, slope=1) +
+  facet_wrap(~cov, scales="free") +
+  theme_bw() +
+  xlab("Mean coef 2022") +
+  ylab("Mean coef 2023")
+
+ggsave(filename = file.path(root, "Figures", "Coefficients_north.jpeg"), width = 20, height = 15)
 
 #3. Correlation vs delta AUC----
 cor.auc <- cor.n %>% 
