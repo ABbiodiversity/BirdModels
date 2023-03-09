@@ -17,7 +17,7 @@ library(allinone) #previous results
 root <- "G:/My Drive/ABMI/Projects/BirdModels/"
 
 #3. Load 2023 coefficients----
-load(file.path(root, "results", "Birds2023-QPADV3.RData"))
+load(file.path(root, "results", "Birds2022.RData"))
 
 #4. Load 2022 coefficients----
 load(file.path(getOption("allinone")$dir, "COEFS.RData"))
@@ -113,8 +113,7 @@ for(i in 1:length(cov.s)){
 spp <- as.character(unlist(unique(dimnames(birds$south$joint))[[1]]))
 cov <- as.character(unlist(unique(dimnames(birds$south$joint))[[2]]))
 loop <- expand.grid(spp=spp, cov=cov, stringsAsFactors = FALSE, KEEP.OUT.ATTRS = FALSE) %>% 
-  dplyr::filter(spp %in% as.character(unlist(unique(dimnames(COEFS$birds$south$joint))[[1]])),
-                !cov %in% c("EnSeismic", "EnSoftLin", "TrSoftLin", "Wellsites"))
+  dplyr::filter(spp %in% as.character(unlist(unique(dimnames(COEFS$birds$south$joint))[[1]])))
 
 t.s <- data.frame()
 for(i in 1:nrow(loop)){
@@ -151,12 +150,17 @@ ggplot(t.s %>%
 
 ggplot(t.s) +
   geom_boxplot(aes(x=cov, y=log(meand))) +
-  theme(axis.text.x = element_text(angle=90))
+  theme(axis.text.x = element_text(angle=90)) +
+  ylab("log of mean 2023 - mean 2022 coefficient")
+
+ggsave(filename = file.path(root, "Figures", "Coefficient_diff_south.jpeg"), width = 8, height = 5)
 
 ggplot(t.s) +
   geom_point(aes(x=mean22, y=mean23)) +
   geom_abline(intercept=0, slope=1) +
   facet_wrap(~cov, scales="free")
+
+ggsave(filename = file.path(root, "Figures", "Coefficients_south.jpeg"), width = 20, height = 15)
 
 #North####
 coef22.n <- rowMeans(COEFS$birds$north$joint, dims=2) %>%
@@ -219,8 +223,7 @@ for(i in 1:length(cov.n)){
 spp <- as.character(unlist(unique(dimnames(birds$north$joint))[[1]]))
 cov <- as.character(unlist(unique(dimnames(birds$north$joint))[[2]]))
 loop <- expand.grid(spp=spp, cov=cov, stringsAsFactors = FALSE, KEEP.OUT.ATTRS = FALSE) %>% 
-  dplyr::filter(spp %in% as.character(unlist(unique(dimnames(COEFS$birds$north$joint))[[1]])),
-                !cov %in% c("EnSeismic", "EnSoftLin", "TrSoftLin", "Wellsites"))
+  dplyr::filter(spp %in% as.character(unlist(unique(dimnames(COEFS$birds$north$joint))[[1]])))
 
 t.n <- data.frame()
 for(i in 1:nrow(loop)){
