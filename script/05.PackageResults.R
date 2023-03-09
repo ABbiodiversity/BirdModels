@@ -27,11 +27,11 @@ options(scipen=99999)
 
 #1. North dataset----
 en <- new.env()
-load(file.path(root, "Data", "3Packaged-North.Rdata"), envir=en)
+load(file.path(root, "Data", "3Packaged-North-2022.Rdata"), envir=en)
 
 #2. South dataset----
 es <- new.env()
-load(file.path(root, "Data", "3Packaged-South.Rdata"), envir=es)
+load(file.path(root, "Data", "3Packaged-South-2022.Rdata"), envir=es)
 
 #3. Model matrices----
 Xn <- get_model_matrix(en$DAT, en$mods)
@@ -47,14 +47,22 @@ B <- 8*32
 
 #6. Full taxa list----
 ee <- new.env()
-load(file.path(root, "Data", "2Wrangled.Rdata"), envir=ee)
+load(file.path(root, "Data", "ab-birds-all-2022-03-09.Rdata"), envir=ee)
 bt <- ee$tax
-row.names(bt) <- bt$code
 rm(ee)
 
+#fix Canada Jay
+bt <- dplyr::filter(bt, sppid!="CanadaJay") %>% 
+  mutate(sppid = ifelse(sppid=="GrayJay", "CanadaJay", sppid),
+         code = ifelse(code=="GRAJ", "CAJA", code),
+         species = ifelse(species=="Gray Jay", "Canada Jay", species))
+row.names(bt) <- bt$code
+colnames(en$YY) <- gsub(x=colnames(en$YY), pattern="GRAJ", replacement="CAJA")
+
 #7. Model species lists----
-SPPn <- substr(list.files(file.path(root, "Results", "CCOutput", "out2023-QPADV3", "north")), 1, 4)
-SPPs <- substr(list.files(file.path(root, "Results", "CCOutput", "out2023-QPADV3", "south")), 1, 4)
+SPPn <- substr(list.files(file.path(root, "Results", "CCOutput", "out2022", "north")), 1, 4)
+SPPs <- substr(list.files(file.path(root, "Results", "CCOutput", "out2022", "south")), 1, 4)
+#take out MCLO
 
 #Add full common names
 names(SPPn) <- bt[SPPn, "sppid"]
@@ -66,7 +74,7 @@ names(SPPs) <- bt[SPPs, "sppid"]
 # s=S model only
 # u=use avail (no model)
 # o=exclude (passing through, extinct, bogus)
-blist <- read.csv(file.path(root, "Data", "lookups", "birds-v2023.csv"))
+blist <- read.csv(file.path(root, "Data", "lookups", "birds-v2022.csv"))
 compare_sets(blist$common, bt$species)
 blist$id <- bt$sppid[match(blist$common, bt$species)]
 rownames(blist) <- blist$id
@@ -79,7 +87,7 @@ SPPs <- SPPs[names(SPPs) %in% rownames(blist)[blist$show %in% c("c", "s")]]
 AUCNorth <- list()
 for (spp in SPPn) {
   cat(spp, "N\n");flush.console()
-  resn <- load_species(file.path(root, "Results", "CCOutput", "out2023-QPADV3", "north", paste0(spp, ".RData")))
+  resn <- load_species(file.path(root, "Results", "CCOutput", "out2022", "north", paste0(spp, ".RData")))
   yn <- as.numeric(en$YY[,spp])
   off <- if (spp %in% colnames(en$OFF))
     en$OFF[,spp] else en$OFFmean
@@ -89,14 +97,14 @@ for (spp in SPPn) {
   AUCNorth[[spp]] <- aucn
 }
 AUCNorth <- unlist(AUCNorth)
-save(AUCNorth, file=file.path(root, "Results", "BIRDS-North-QPADV3-AUC.RData"))
-load(file.path(root, "Results", "BIRDS-North-QPADV3-AUC.RData"))
+save(AUCNorth, file=file.path(root, "Results", "BIRDS-North-AUC_2022.RData"))
+load(file.path(root, "Results", "BIRDS-North-AUC_2022.RData"))
 
 #South
 AUCSouth <- list()
 for (spp in SPPs) {
     cat(spp, "N\n");flush.console()
-    ress <- load_species(file.path(root, "Results", "CCOutput", "out2023-QPADV3", "south", paste0(spp, ".RData")))
+    ress <- load_species(file.path(root, "Results", "CCOutput", "out2022", "south", paste0(spp, ".RData")))
     ys <- as.numeric(es$YY[,spp])
     off <- if (spp %in% colnames(es$OFF))
         es$OFF[,spp] else es$OFFmean
@@ -106,8 +114,8 @@ for (spp in SPPs) {
     AUCSouth[[spp]] <- aucs
 }
 AUCSouth <- unlist(AUCSouth)
-save(AUCSouth, file=file.path(root, "Results", "BIRDS-South-QPADV3-AUC.RData"))
-load(file.path(root, "Results", "BIRDS-South-QPADV3-AUC.RData"))
+save(AUCSouth, file=file.path(root, "Results", "BIRDS-South-AUC_2022.RData"))
+load(file.path(root, "Results", "BIRDS-South-AUC_2022.RData"))
 
 #10. Calculate coefficients---
 #North
@@ -116,50 +124,51 @@ for (spp in SPPn) {
   cat(spp, "\n")
   flush.console()
   
-  res <- load_species(file.path(root, "Results", "CCOutput", "out2023-QPADV3", "north", paste0(spp, ".RData")))
+  res <- load_species(file.path(root, "Results", "CCOutput", "out2022", "north", paste0(spp, ".RData")))
   
   est1 <- suppressWarnings(get_coef(res, Xn, stage="ARU", na.out=FALSE))
   est2 <- suppressWarnings(get_coef(res, Xn, stage="Space", na.out=FALSE))
   
-  BB <- min(B, nrow(est1))
+  BB <- min(B, nrow(est1), nrow(est2))
   cf1 <- sapply(1:BB, function(i) get_coef_north(est1, subset=i))
   cf2 <- sapply(1:BB, function(i) get_coef_north(est2, subset=i))
   
   cfn[[spp]] <- list(estARU=est1, estSpace=est2, coefARU=cf1, coefSpace=cf2)
 }
-save(cfn, file=file.path(root, "Results", "BIRDS-North-QPADV3-coefs.RData"))
-load(file=file.path(root, "Results", "BIRDS-North-QPADV3-coefs.RData"))
+save(cfn, file=file.path(root, "Results", "BIRDS-North-coefs_2022.RData"))
+load(file=file.path(root, "Results", "BIRDS-North-coefs_2022.RData"))
 
 #South
+#MISSING THINBREAK ROUGHP TAMEP
 cfs <- list()
 for (spp in SPPs) {
     cat(spp, "\n")
     flush.console()
 
-    res <- load_species(file.path(root, "Results", "CCOutput", "out2023-QPADV3", "south", paste0(spp, ".RData")))
+    res <- load_species(file.path(root, "Results", "CCOutput", "out2022", "south", paste0(spp, ".RData")))
     
     est1 <- suppressWarnings(get_coef(res, Xs, stage="ARU", na.out=FALSE))
     est2 <- suppressWarnings(get_coef(res, Xs, stage="Space", na.out=FALSE))
+    
+    #Remove bootstraps that don't use full soil layer
+    est1 <- est1[rowSums(est1[,2:11])>0,]
+    est2 <- est2[rowSums(est2[,2:11])>0,]
 
-    BB <- min(B, nrow(est1))
+    BB <- min(B, nrow(est1), nrow(est2))
     cf1 <- sapply(1:BB, function(i) get_coef_south(est1, subset=i))
     cf2 <- sapply(1:BB, function(i) get_coef_south(est2, subset=i))
 
     cfs[[spp]] <- list(estARU=est1, estSpace=est2, coefARU=cf1, coefSpace=cf2)
 }
-save(cfs, file=file.path(root, "Results", "BIRDS-South-QPADV3-coefs.RData"))
-load(file.path(root, "Results", "BIRDS-South-QPADV3-coefs.RData"))
+save(cfs, file=file.path(root, "Results", "BIRDS-South-coefs_2022.RData"))
+load(file.path(root, "Results", "BIRDS-South-coefs_2022.RData"))
 
 #11. Align species lists----
 TAX <- read.csv(file.path(root, "Data", "lookups", "birdlist.csv"))
 row.names(TAX) <- TAX$code
 
-compare_sets(blist$common, TAX$species)
+compare_sets(blist$common, TAX$species) #LTDU in one of them; ignore
 TAX$type <- blist$show[match(TAX$species, blist$common)]
-
-#New species added in 2023 for experimental purposes
-#North:YERA RTHA NSWO NOPI HOGR CLNU COLO BADO
-#South: CONI RTHA NOPI
 
 SPPn <- names(ALLBIRDSPP$north[match(names(cfn), ALLBIRDSPP$north)])
 SPPs <- names(ALLBIRDSPP$south[match(names(cfs), ALLBIRDSPP$south)])
@@ -188,14 +197,13 @@ cnb <- c("pWater_KM", "pWater2_KM", "xPET",
          "xY2", "xX2", "xFFP:xMAP", "xMAP:xPET", "xAHM:xMAT", "xX:xY")
 
 #13. Set bootstrap maximum----
-BMAX <- 250
-
-Bs <- min(BMAX, nrow(cfs[[spp]]$estSpace))
-Bn <- min(BMAX, nrow(cfn[[spp]]$estSpace))
+BMAX <- 100
 
 #14. Organize north coefficients----
 set.seed(1234)
 for (spp in names(cfn)) {
+  
+  Bn <- min(BMAX, nrow(cfn[[spp]]$estSpace), nrow(cfn[[spp]]$estARU))
   
   #Get marginal and joint estimates
   if(nrow(cfn[[spp]]$estARU) >= BMAX){
@@ -239,6 +247,8 @@ for (spp in names(cfn)) {
 set.seed(1234)
 for (spp in names(cfs)) {
   
+  Bs <- min(BMAX, nrow(cfs[[spp]]$estSpace), nrow(cfs[[spp]]$estARU))
+  
   #Get marginal and joint estimates
   cfsm <- rbind(log(cfs[[spp]]$coefARU)[,1:Bs], pAspen=cfs[[spp]]$estARU[1:Bs,"pAspen"])
   cfsj <- rbind(log(cfs[[spp]]$coefSpace)[,1:Bs], t(cfs[[spp]]$estSpace[1:Bs,c("pAspen", cnb)]))
@@ -272,14 +282,14 @@ for (spp in names(cfs)) {
 }
 
 #16. Compare coeff names----
-compare_sets(rownames(cfnm),dimnames(COEFS$lichens$north)[[2]])
-compare_sets(rownames(cfsm),dimnames(COEFS$lichens$south)[[2]])
+compare_sets(rownames(cfnm),dimnames(COEFS$birds$north)[[2]])
+compare_sets(rownames(cfsm),dimnames(COEFS$birds$south)[[2]])
 
 #17. Put together bird look up table----
 edat <- new.env()
-load(file=file.path(root, "Data", "2Wrangled.Rdata"), envir=edat)
-uu <- edat$tax %>% 
-  dplyr::filter(!code %in% c("GRAJ", "MCLO"))
+load(file=file.path(root, "Data",  "ab-birds-all-2022-03-09.Rdata"), envir=edat)
+colnames(edat$yy) <- gsub(colnames(edat$yy), pattern="GRAJ", replacement="CAJA")
+uu <- bt
 yy <- as.matrix(edat$yy)
 
 uu$keep <- as.character(uu$species) %in%
@@ -367,10 +377,10 @@ birds$north$marginal[1,c(90:93),1:10]
 COEFS$birds$north$joint[1,c(90:93),1:10]
 birds$north$joint[1,c(90:93),1:10]
 
-COEFS$birds$south$marginal[1,,1:10]
-birds$south$marginal[1,,1:10]
-COEFS$birds$south$joint[1,,1:10]
-birds$south$joint[1,,1:10]
+COEFS$birds$south$marginal[1,c(15:18),1:10]
+birds$south$marginal[1,c(15:18),1:10]
+COEFS$birds$south$joint[1,(15:18),1:10]
+birds$south$joint[1,c(15:18),1:10]
 
 #Check number of bootstraps
 length(COEFS$birds$north$marginal[1,1,])
@@ -378,17 +388,5 @@ length(birds$north$marginal[1,1,])
 length(COEFS$birds$south$marginal[1,1,])
 length(birds$south$marginal[1,1,])
 
-# #Fix number of bootstraps
-# birds <- list(
-#   north=list(marginal=CFnm[,,1:100], joint=CFnj[,,1:100]),
-#   south=list(marginal=CFsm[,,1:100], joint=CFsj[,,1:100]),
-#   species=spb)
-# 
-# #Check number of bootstraps again
-# length(COEFS$birds$north$marginal[1,1,])
-# length(birds$north$marginal[1,1,])
-# length(COEFS$birds$south$marginal[1,1,])
-# length(birds$south$marginal[1,1,])
-
 #20. Write out----
-save(birds, file=file.path(root, "Results", "Birds2023-QPADV3.RData"))
+save(birds, file=file.path(root, "Results", "Birds2022.RData"))
