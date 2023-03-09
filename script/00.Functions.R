@@ -780,7 +780,7 @@ ALLBIRDSPP <- list(
               CommonYellowthroat = "COYE", ChestnutsidedWarbler = "CSWA", DarkeyedJunco = "DEJU",
               DownyWoodpecker = "DOWO", EasternKingbird = "EAKI", EasternPhoebe = "EAPH",
               EuropeanStarling = "EUST", EveningGrosbeak = "EVGR", FoxSparrow = "FOSP",
-              GoldencrownedKinglet = "GCKI", GrayJay = "GRAJ", GrayCatbird = "GRCA",
+              GoldencrownedKinglet = "GCKI", CanadaJay = "CAJA", GrayCatbird = "GRCA",
               GreaterYellowlegs = "GRYE", HairyWoodpecker = "HAWO", HermitThrush = "HETH", HornedGrebe = "HOGR",
               HornedLark = "HOLA", HouseSparrow = "HOSP", HouseWren = "HOWR",
               Killdeer = "KILL", LeContesSparrow = "LCSP", LeastFlycatcher = "LEFL",
