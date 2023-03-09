@@ -22,10 +22,16 @@ library(opticut) #For lorenz curve in model
 root <- "G:/My Drive/ABMI/Projects/BirdModels/"
 
 #3. Load harmonized set----
-load(file.path(root, "Data", "2Wrangled.Rdata"))
+load(file.path(root, "Data", "ab-birds-all-2022-03-09.Rdata"))
 
 #4. Load functions----
 source("script/00.Functions.R")
+
+#5. Get previous version of coefficients for factor levels----
+library(allinone)
+dir <- getOption("allinone")$dir
+fn <- file.path(dir, "COEFS.RData")
+load(fn)
 
 #A. REMOVE MISSING DATA#########
 #Logic summary
@@ -173,8 +179,8 @@ dd$ROAD[is.na(dd$ROAD)] <- 0
 table(dd$ROAD, dd$pRoad > 0.04, useNA="a")
 
 #11. Define ARU----
-#this version replaces the use of the "CMETHOD" (riverforks vs ARU vs human) parameter in model set #4 with an "SM2" parameter that accounts for the smaller EDR of the SM2 model relative to human observers and other recorder types (see Yip et al. 2017 in ACE-ECO). The differences in availability for detection between humans and ARUs are now directly incorporated into QPAD V4.
-dd$SM2 <- ifelse(dd$EQUIP=="SM2", "SM2", ifelse(dd$EQUIP=="unknown", "unknown", "human"))
+#2023 only: this version replaces the use of the "CMETHOD" (riverforks vs ARU vs human) parameter in model set #4 with an "SM2" parameter that accounts for the smaller EDR of the SM2 model relative to human observers and other recorder types (see Yip et al. 2017 in ACE-ECO). The differences in availability for detection between humans and ARUs are now directly incorporated into QPAD V4.
+#dd$SM2 <- ifelse(dd$EQUIP=="SM2", "SM2", ifelse(dd$EQUIP=="unknown", "unknown", "human"))
 
 #E. RECLASSIFY LANDCOVER####
 
@@ -375,10 +381,14 @@ tmp2 <- find_max(sr1r[,colnames(sr1r) %ni% c("SoilWater", "SoilUnknown", "HWater
 dd$soilc[ii] <- tmp2$index[ii]
 dd$soilv[ii] <- tmp2$value[ii]
 dd$soilw <- pmax(0, pmin(1, 2*dd$soilv-0.5))
+
+#check against point value
 a <- table(pt=dd$soilpt,bf=droplevels(dd$soilc))
 a <- a[colnames(a),]
-sum(diag(a))/sum(a) # pretty good
-dd$soilc <- droplevels(dd$soilc)
+sum(diag(a))/sum(a) # AWFUL!
+
+#fix factor levels
+dd$soilc <- droplevels(dd$soilc, except = 19)
 dd$soilc <- relevel(dd$soilc, "Loamy")
 
 #K. IDENTIFY SOUTH REGION####
@@ -430,6 +440,7 @@ source(file.path(root.qpad, "functions.R"))
 #5. Make prediction object---
 x <- dd %>% 
   mutate(time=str_sub(as.character(DATI), 12, 16)) %>% 
+  mutate(TAGMETHOD = NA) %>% 
   rename(date=DATE,
          lon=X,
          lat=Y,
@@ -518,8 +529,11 @@ setdiff(get_terms(mods_soil, "list"), colnames(dd))
 #3. Subset covariate object----
 #relevant terms only
 #use south only
+#fix levels
 cn2 <- c(cn, get_terms(mods_soil, "list"), "soilw")
 DAT <- droplevels(dd[dd$useSouth & dd$RND > 10, cn2])
+soilclev <- colnames(COEFS$birds$south$marginal)[!colnames(COEFS$birds$south$marginal) %in% levels(DAT$soilc)]
+levels(DAT$soilc) <- c(levels(DAT$soilc), "TameP", "RoughP", "ThinBreak")
 
 #4. Subset detection object----
 YY <- yy[rownames(DAT),]
@@ -552,7 +566,7 @@ cat("Estimate for", ncol(YY), "species and", B, "runs is", ceiling(unname(ncol(Y
 
 #10. Save out----
 #10a. Save to google drive for archive
-save(DAT, YY, OFF, OFFmean, SSH, BB, mods, file=file.path(root, "Data", "3Packaged-South.Rdata"))
+save(DAT, YY, OFF, OFFmean, SSH, BB, mods, file=file.path(root, "Data", "3Packaged-South-2022.Rdata"))
 
 #10b. Save to local for compute canada
 save(DAT, YY, OFF, OFFmean, SSH, BB, mods, file=file.path("script", "04.ComputeCanada", "data", "3Packaged-South.Rdata"))
@@ -610,7 +624,7 @@ cat("Estimate for", ncol(YY), "species and", B, "runs is", ceiling(unname(ncol(Y
 #10. Save out-----
 
 #10a. Save to google drive for archive
-save(DAT, YY, OFF, OFFmean, SSH, BB, mods, file=file.path(root, "Data", "3Packaged-North.Rdata"))
+save(DAT, YY, OFF, OFFmean, SSH, BB, mods, file=file.path(root, "Data", "3Packaged-North-2022.Rdata"))
 
 #10b. Save to local for compute canada
 save(DAT, YY, OFF, OFFmean, SSH, BB, mods, file=file.path("script", "04.ComputeCanada", "data", "3Packaged-North.Rdata"))
