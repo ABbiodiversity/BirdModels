@@ -252,7 +252,7 @@ aru.wt <- dat.wt %>%
   dplyr::select(all_of(colnms))
 
 #2d. Replace TMTTs with predicted abundance----
-tmtt <- read.csv("C:/Users/Elly Knight/Documents/ABMI/Projects/WildTrax/TMTT/data/tmtt_predictions_mean.csv") %>% 
+tmtt <- read.csv("C:/Users/elly/Documents/ABMI/WildTrax/TMTT/data/tmtt_predictions_mean.csv") %>% 
   rename(species = species_code)
 
 tmtt.wt <- aru.wt %>% 
@@ -371,7 +371,8 @@ unlink(temp)
 
 #Filter to Alberta
 shp <- read_sf(file.path(root, "Data", "gis", "lpr_000b21a_e.shp")) %>% 
-  dplyr::filter(PRNAME=="Alberta")
+  dplyr::filter(PRNAME=="Alberta") %>% 
+  vect()
 
 #Create rasters (much faster than from polygon)
 r <- rast(ext(shp), resolution=1000, crs=crs(shp))
@@ -517,8 +518,7 @@ visit <- visit.ab %>%
   anti_join(visit.ebird.remove) %>% 
   anti_join(visit.dup3.remove) %>% 
   dplyr::filter(year >= 1993) %>% 
-  mutate(gisid = paste0(location, "_", year),
-         surveyid)
+  mutate(gisid = paste0(location, "_", year))
 
 bird <- use.ab %>% 
   anti_join(visit.josm.remove) %>% 
