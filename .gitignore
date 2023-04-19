@@ -51,3 +51,6 @@ OneDrive*
 
 # test output
 out/*
+.Rproj.user
+.Rdata
+.DS_Store
