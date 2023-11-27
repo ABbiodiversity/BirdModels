@@ -57,7 +57,7 @@ out/*
 
 # Compute Canada inputs & outputs
 COEFS.RData
-*04.ComputeCanada/data/
-*04.ComputeCanada/out/*
-*04.ComputeCanada/south-*
-*04.ComputeCanada/north-*
+script/04.ComputeCanada/data/
+script/04.ComputeCanada/out/*
+script/04.ComputeCanada/south-*
+script/04.ComputeCanada/north-*
