@@ -31,7 +31,7 @@ load(file.path(root, "Data", "3Packaged-North-2022.Rdata"), envir=en)
 
 #2. South dataset----
 es <- new.env()
-load(file.path(root, "Data", "3Packaged-South-2022.Rdata"), envir=es)
+load(file.path(root, "Data", "ab-birds-south-2020-12-04.RData"), envir=es)
 
 #3. Model matrices----
 Xn <- get_model_matrix(en$DAT, en$mods)
@@ -151,8 +151,8 @@ for (spp in SPPs) {
     est2 <- suppressWarnings(get_coef(res, Xs, stage="Space", na.out=FALSE))
     
     #Remove bootstraps that don't use full soil layer
-    est1 <- est1[rowSums(est1[,2:11])>0,]
-    est2 <- est2[rowSums(est2[,2:11])>0,]
+    # est1 <- est1[rowSums(est1[,2:11])>0,]
+    # est2 <- est2[rowSums(est2[,2:11])>0,]
 
     BB <- min(B, nrow(est1), nrow(est2))
     cf1 <- sapply(1:BB, function(i) get_coef_south(est1, subset=i))
@@ -390,3 +390,4 @@ length(birds$south$marginal[1,1,])
 
 #20. Write out----
 save(birds, file=file.path(root, "Results", "Birds2022.RData"))
+
