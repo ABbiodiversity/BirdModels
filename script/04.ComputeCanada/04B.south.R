@@ -1,6 +1,6 @@
 ## --- settings ---
 ## file name for data bundle, need to be in /data/ dir
-fn <- "data/3Packaged-South.Rdata"
+fn <- "data/ab-birds-south-2020-12-04.RData"
 ## project name for storing the output
 PROJ <- "south"
 
@@ -27,7 +27,7 @@ source("00.Functions.R")
 if (interactive()) {
   nodeslist <- 2
   BBB <- 2
-  setwd("C:/Users/Elly Knight/Documents/ABMI/Projects/ABModels/BirdModels/script/04.ComputeCanada")
+  setwd("C:/Users/elly/Documents/ABMI/ABModels/BirdModels/script/04.ComputeCanada")
 } else {
   cat("OK\n* Getting nodes list ... ")
   nodeslist <- unlist(strsplit(Sys.getenv("NODESLIST"), split=" "))
@@ -43,7 +43,7 @@ if (interactive()) {
 cat("* Spawning workers...")
 cl <- makePSOCKcluster(nodeslist, type = "PSOCK")
 
-if (interactive()) tmpcl <- clusterEvalQ(cl, setwd("C:/Users/Elly Knight/Documents/ABMI/Projects/ABModels/BirdModels/script/04.ComputeCanada")) else tmpcl <- clusterEvalQ(cl, setwd("/home/ecknight/ABMI-BirdModels"))
+if (interactive()) tmpcl <- clusterEvalQ(cl, setwd("C:/Users/elly/Documents/ABMI/ABModels/BirdModels/script/04.ComputeCanada")) else tmpcl <- clusterEvalQ(cl, setwd("/home/ecknight/ABMI-BirdModels"))
 
 cat("OK\n* Loading data on master ... ")
 load(file.path(fn))
