@@ -17,7 +17,7 @@ library(allinone) #previous results
 root <- "G:/My Drive/ABMI/Projects/BirdModels/"
 
 #3. Load 2023 coefficients----
-load(file.path(root, "results", "Birds2022.RData"))
+load(file.path(root, "results", "Birds2023.RData"))
 
 #4. Load 2022 coefficients----
 load(file.path(getOption("allinone")$dir, "COEFS.RData"))
@@ -71,7 +71,22 @@ coef23.s <- rowMeans(birds$south$joint, dims=2) %>%
   pivot_longer(cols = Loamy:xX.xY, names_to="covariate", values_to="coef23")
 
 coef.s <- full_join(coef22.s, coef23.s) %>% 
-  dplyr::filter(!is.na(coef22), !is.na(coef23))
+  dplyr::filter(!is.na(coef22), !is.na(coef23)) %>% 
+  mutate(same = ifelse(coef22==coef23, 1, 0),
+         diff = abs(coef22 - coef23))
+
+table(coef.s$covariate, coef.s$same)
+
+#Plot the coefficients against each other-----
+ggplot(coef.s %>% 
+         dplyr::filter(!covariate %in% c("EnSeismic", "EnSoftLin", "TrSoftLin", "Wellsites"),
+                       coef22 > -10000,
+                       coef23 > -10000,
+                       !species %in% c("BrewersSparrow", "LarkSparrow", "LarkBunting", "Bobolink"))) +
+  geom_point(aes(x=coef22, y=coef23, colour=species)) +
+  geom_abline(aes(intercept=0, slope = 1)) +
+  geom_hline(aes(yintercept=0)) +
+  geom_vline(aes(xintercept=0))
 
 #Correlation by species----
 spp <- unique(coef.s$species)
@@ -80,7 +95,8 @@ cor.s <- data.frame()
 for(i in 1:length(spp)){
   
   coef.i <- coef.s %>% 
-    dplyr::filter(species==spp[i])
+    dplyr::filter(species==spp[i],
+                  !covariate %in% c("EnSeismic", "EnSoftLin", "TrSoftLin", "Wellsites"))
   
   lm.i <- lm(coef22 ~ coef23, coef.i)
   
@@ -94,20 +110,30 @@ for(i in 1:length(spp)){
   
 }
 
-ggplot(dplyr::filter(resid.s, !covariate %in% c("EnSeismic", "EnSoftLin", "TrSoftLin", "Wellsites"))) +
+#Plot the residuals
+ggplot(resid.s) +
   geom_boxplot(aes(x=covariate, y=resid)) +
+  theme(axis.text.x = element_text(angle = 90, hjust=1, vjust=0.5))
+
+ggplot(resid.s) +
+  geom_boxplot(aes(x=species, y=resid)) +
   theme(axis.text.x = element_text(angle = 90, hjust=1, vjust=0.5))
 
 #Correlation by covariate----
 cov.s <- unique(coef.s$covariate)
 cor.cov.s <- data.frame()
 for(i in 1:length(cov.s)){
+  
   coef.i <- coef.s %>% 
     dplyr::filter(covariate==cov.s[i])
+  
   cor.cov.s <- rbind(cor.cov.s,
                      data.frame(covariate=cov.s[i],
                                 cor = cor(coef.i$coef22, coef.i$coef23)))
 }
+
+cor.cov.s %>% 
+  arrange(desc(cor))
 
 #Correlation by species and covariate-----
 spp <- as.character(unlist(unique(dimnames(birds$south$joint))[[1]]))
@@ -176,7 +202,22 @@ coef23.n <- rowMeans(birds$north$joint, dims=2) %>%
   pivot_longer(cols = WhiteSpruceR:xX.xY, names_to="covariate", values_to="coef23")
 
 coef.n <- full_join(coef22.n, coef23.n) %>% 
-  dplyr::filter(!is.na(coef22), !is.na(coef23))
+  dplyr::filter(!is.na(coef22), !is.na(coef23)) %>% 
+  mutate(same = ifelse(coef22==coef23, 1, 0))
+
+ggplot(coef.n %>% 
+         dplyr::filter(!covariate %in% c("EnSeismic", "EnSoftLin", "TrSoftLin", "Wellsites"),
+                       coef22 > -10000,
+                       coef23 > -10000)) +
+  geom_point(aes(x=coef22, y=coef23, colour=species)) +
+  geom_abline(aes(intercept=0, slope = 1)) +
+  geom_hline(aes(yintercept=0)) +
+  geom_vline(aes(xintercept=0)) +
+  facet_wrap(~covariate, scales="free") +
+  theme(legend.position = "none")
+
+table(coef.n$covariate, coef.n$same)
+#Just the linear ones, all good
 
 spp <- unique(coef.n$species)
 resid.n <- data.frame()
@@ -261,6 +302,8 @@ ggplot(t.n %>%
 ggplot(t.n) +
   geom_boxplot(aes(x=cov, y=log(meand))) +
   theme(axis.text.x = element_text(angle=90))
+
+ggsave(filename = file.path(root, "Figures", "Coefficient_diff_north.jpeg"), width = 8, height = 5)
 
 ggplot(t.n) +
   geom_point(aes(x=mean22, y=mean23)) +
