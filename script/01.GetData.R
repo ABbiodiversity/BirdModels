@@ -43,110 +43,115 @@ library(terra) #raster wrangling
 
 root <- "G:/My Drive/ABMI/Projects/BirdModels/"
 
-#A. DOWNLOAD DATA FROM WILDTRAX#######################
-
-#1. Login to WildTrax----
+#3. Login to WildTrax----
 config <- "script/00.WTlogin.R"
 source(config)
 
-#1. Get list of projects from WildTrax----
+#4. Authenticate----
 wt_auth()
 
+#A. DOWNLOAD DATA FROM WILDTRAX#######################
+
+#1. Get list of projects from WildTrax----
 #sensor = PC gives all ARU and point count projects
-project.list <- wt_get_download_summary(sensor_id = 'PC')
+projects <- wt_get_download_summary(sensor_id = 'PC')
 
-#2. Convert to a plain dataframe----
-projects <- data.frame(project = as.character(project.list$project),
-                       project_id = as.numeric(project.list$project_id),
-                       sensorId = as.character(project.list$sensorId),
-                       tasks = as.numeric(project.list$tasks),
-                       status = as.character(project.list$status))
-
-#3. Loop through projects to download data----
-dat.list <- list()
-error.log <- data.frame()
-for(i in 1:nrow(projects)){
-  
-  #Do each sensor type separately because the reports have different columns and we need different things for each sensor type
-  if(projects$sensorId[i]=="ARU"){
-    
-    #Get summary report
-    report.try <- try(wt_download_report(project_id = projects$project_id[i], sensor_id = projects$sensorId[i], weather_cols = F, report = "summary"))
-    
-    #Get task report for ARU model
-    task.try <- try(wt_download_report(project_id = projects$project_id[i], sensor_id = projects$sensorId[i], weather_cols = F, report = "task"))
-    
-    if(class(report.try)=="data.frame"){
-      dat.try <- report.try %>% 
-        left_join(task.try  %>% 
-                    dplyr::select("organization", "project_name", "location", "recording_date", "longitude", "latitude", "method", "status", "observer", "observer_id", "equipment_used", "buffer"))
-    }
-  }
-  
-  if(projects$sensorId[i]=="PC"){
-    
-    dat.try <- try(wt_download_report(project_id = projects$project_id[i], sensor_id = projects$sensorId[i], weather_cols = F, report="report"))
-    
-  }
-  
-  if(class(dat.try)=="data.frame"){
-    dat.list[[i]] <- dat.try
-  }
-  
-  #Log projects that error
-  if(class(dat.try)!="data.frame"){
-    error.log <- rbind(error.log, 
-                       projects[i,])
-    
-  }
-  
-  print(paste0("Finished dataset ", projects$project[i], " : ", i, " of ", nrow(projects), " projects"))
-  
-}
-
-#4. Go download error projects from wildtrax.ca----
-
-#5. Read in error projects----
-error.files <- list.files(file.path(root, "Data", "WildTrax", "errorFiles"), full.names = TRUE)
-
-raw.error <- data.frame()
-for(i in 1:length(error.files)){
-  raw.error <- read.csv(error.files[i]) %>% 
-    rbind(raw.error)
-}
-
-#6. Collapse list----
-#standardize column names between sensor types
-
-all.wt <- rbindlist(dat.list, fill=TRUE)  %>% 
-  rbind(raw.error, fill=TRUE) %>% 
-  mutate(project = ifelse(is.na(project), project_name, project),
-         speciesCode = ifelse(is.na(speciesCode), species_code, speciesCode),
-         date = ifelse(is.na(date), recording_date, date),
-         buffer = ifelse(is.na(buffer), bufferRadius.m., buffer)) %>%
-  dplyr::select(-project_name, -recording_date, -species_code, -bufferRadius.m.) %>% 
-  left_join(projects %>% 
-              dplyr::rename(project_status = status))
-
-#7. Filter out projects that shouldn't be used----
+#2. Filter out projects that shouldn't be used----
 #nothing in BU training & all "DO NOT USE" projects in projectInventory file
 #filter out 'NONE' method ARU projects later after this field is parsed out
 
 instructions <- read.csv(file.path(root, "Data", "projectInventory", "projectInstructions.csv"))
 
-raw.wt <- all.wt %>% 
+projects.use <- projects %>% 
   left_join(instructions) %>%
   mutate(instruction = ifelse(is.na(instruction), "NO RESTRICTION", instruction)) %>% 
   dplyr::filter(organization!="BU-TRAINING",
-                instruction!="DO NOT USE")
+                !instruction %in% c("DO NOT USE", "SINGLE SPECIES"))
 
-#9. Save date stamped data & project list----
-save(raw.wt, projects, error.log, file=paste0(root, "/Data/WildTrax/wildtrax_raw_", Sys.Date(), ".Rdata"))
+#3. Loop through projects to download data----
+aru.list <- list()
+pc.list <- list()
+error.log <- data.frame()
+for(i in 1:nrow(projects.use)){
+  
+  #authenticate each time because this loop takes forever
+  wt_auth()
+  
+  #Do each sensor type separately because the reports have different columns and we need different things for each sensor type
+  if(projects$sensor[i]=="ARU"){
+    
+    dat.try <- try(wt_download_report(project_id = projects.use$project_id[i], sensor_id = projects.use$sensor[i], weather_cols = F, report = "main"))
+    
+    if(class(dat.try)=="data.frame"){
+      aru.list[[i]] <- dat.try
+    }
+    
+  }
+  
+  if(projects$sensor[i]=="PC"){
+    
+    dat.try <- try(wt_download_report(project_id = projects.use$project_id[i], sensor_id = projects.use$sensor[i], weather_cols = F, report="main"))
+    
+    if(class(dat.try)=="data.frame"){
+      pc.list[[i]] <- dat.try
+    }
+    
+  }
+  
+  #Log projects that error
+  if(class(dat.try)!="data.frame"){
+    error.log <- rbind(error.log, 
+                       projects.use[i,])
+    
+  }
+  
+  print(paste0("Finished dataset ", projects.use$project[i], " : ", i, " of ", nrow(projects.use), " projects"))
+  
+}
+
+#4. Go download error projects from wildtrax.ca----
+error.log %>% 
+  inner_join(projects.use %>% 
+              mutate(i = row_number())) %>% 
+  View()
+
+#5. Read in error projects----
+error.files.aru <- list.files(file.path(root, "Data", "WildTrax", "errorFiles", "ARU"), full.names = TRUE)
+
+aru.error <- data.frame()
+for(i in 1:length(error.files.aru)){
+  aru.error <- read.csv(error.files.aru[i]) %>% 
+    rbind(aru.error)
+}
+
+error.files.pc <- list.files(file.path(root, "Data", "WildTrax", "errorFiles", "PC"), full.names = TRUE)
+
+pc.error <- data.frame()
+for(i in 1:length(error.files.pc)){
+  pc.error <- read.csv(error.files.pc[i]) %>% 
+    rbind(pc.error)
+}
+
+#6. Collapse lists----
+#Take out ARU projects with "None" method
+aru.wt <- rbindlist(aru.list[], fill=TRUE)  %>% 
+  rbind(aru.error, fill=TRUE) %>% 
+  left_join(projects %>% 
+              dplyr::rename(project_status = status)) %>% 
+  dplyr::filter(task_method!="None")
+
+pc.wt <- rbindlist(pc.list[], fill=TRUE)  %>% 
+  rbind(pc.error, fill=TRUE) %>% 
+  left_join(projects %>% 
+              dplyr::rename(project_status = status))
+
+#7. Save date stamped data & project list----
+save(aru.wt, pc.wt, projects.use, error.log, file=paste0(root, "/Data/WildTrax/wildtrax_raw_", Sys.Date(), ".Rdata"))
 
 #B. GET EBIRD DATA##########################
 
 #1. Set ebd path----
-auk_set_ebd_path(file.path(root, "Data/ebd_CA-AB_relOct-2022"), overwrite=TRUE)
+auk_set_ebd_path(file.path(root, "Data/ebd/ebd_CA-AB_relOct-2022"), overwrite=TRUE)
 
 #2. Define filters----
 filters <- auk_ebd(file="ebd_CA-AB_relOct-2022.txt") %>% 
@@ -161,38 +166,60 @@ filtered <- auk_filter(filters, file=file.path(root, "Data/ebd_data_filtered.txt
 
 #C. HARMONIZE###############################
 
-#1. Set desired columns----
+#1. Get list of bird species----
+library(QPAD)
+load_BAM_QPAD(3)
+spp <- QPAD::getBAMspecieslist()
+
+#2. Set desired columns----
 colnms <- c("source", "organization", "project", "sensor", "tagMethod", "equipment", "location", "buffer", "lat", "lon", "year", "date", "observer", "duration", "distance", "species", "abundance", "isSeen", "isHeard")
 
-#2. Wrangle wildtrax data-----
+#3. Load WildTrax data-----
+load(file.path(root, "Data", "WildTrax", "wildtrax_raw_2023-11-21.Rdata"))
 
-load(file.path(root, "Data", "WildTrax", "wildtrax_raw_2023-01-18.Rdata"))
+#4. Wrangle WT ARU data----
+#To do filter to QPAD list
+#Fix replace_tmtt error
 
-#2a. A bit of prep----
-#correct a few location names to match gis
-dat.wt <- raw.wt %>% 
-  dplyr::select(-observer) %>% 
-  rename(lat = latitude, lon = longitude, species = speciesCode, equipment = equipment_used, observer=observer_id) %>% 
-  full_join(projects %>% 
-              rename(sensor = sensorId) %>% 
-              dplyr::select(project_id, project, sensor)) %>% 
-  mutate(source = "WildTrax", 
-         date = ymd_hms(date),
-         year = year(date)) %>% 
-  separate(buffer, into=c("buffer"), sep=" ", remove=TRUE) %>% 
+aru.use <- aru.wt %>% 
+  wt_tidy_species() %>% 
+  wt_replace_tmtt() %>% 
+  wt_make_wide() %>% 
+  mutate(source="WildTrax") %>% 
   mutate(buffer = as.numeric(ifelse(!buffer %in% c("50", "10000"), str_sub(buffer, -100, -2), buffer)),
          buffer = ifelse(is.na(buffer), 0, buffer),
          location = case_when(str_sub(location, 1, 4)=="1577" ~ paste0("1577B", str_sub(location, 5, 100)),
                               str_sub(location, 1, 7)=="OG-1600" ~ paste0("OG-ABMI-1600", str_sub(location, 8, 100)),
                               !is.na(location) ~ location))
 
-#2b. Get the point count data----
+#5. Wrangle WT PC data----
 #wrangle distance and duration maximums
 #remove counts with unknown duration and distance
-pc.wt.meth <- dat.wt %>% 
-  dplyr::filter(sensor=="PC",
-                durationMethod!="UNKNOWN",
+pc.use <- pc.wt %>% 
+  dplyr::filter(durationMethod!="UNKNOWN",
                 distanceMethod!="UNKNOWN") %>% 
+  wt_tidy_species() %>% 
+  wt_make_wide() %>% 
+  mutate(source="WildTrax") %>% 
+
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+
+
+
+
+#2b. Get the point count data----
+
+pc.wt.meth <- dat.wt %>% 
+  dplyr::filter(sensor=="PC") %>% 
   dplyr::select(durationMethod, distanceMethod) %>% 
   unique() %>% 
   rowwise() %>% 
@@ -388,9 +415,10 @@ visit.ab <- use.visit %>%
   dplyr::filter(PRNAME=="Alberta") %>% 
   dplyr::select(colnames(use.visit))
 
-#apply to bird data
+#apply to bird data and clip again by shp for precision
 use.ab <- use %>% 
-  inner_join(visit.ab)
+  inner_join(visit.ab) %>% 
+  st_intersection(shp)
 
 #3. Remove duplicate surveys----
 
