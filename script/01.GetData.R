@@ -166,137 +166,62 @@ filtered <- auk_filter(filters, file=file.path(root, "Data/ebd_data_filtered.txt
 
 #C. HARMONIZE###############################
 
+#TO DO: FIX COLUMN SELECTION FOR WILDTRAX DATA####
+#TO DO: DECIDE ABOUT SEEN/HEARD SONG/CALL####
+
 #1. Get list of bird species----
 library(QPAD)
 load_BAM_QPAD(3)
 spp <- QPAD::getBAMspecieslist()
+species <- wt_get_species()
 
 #2. Set desired columns----
-colnms <- c("source", "organization", "project", "sensor", "tagMethod", "equipment", "location", "buffer", "lat", "lon", "year", "date", "observer", "duration", "distance", "species", "abundance", "isSeen", "isHeard")
+colnms <- c("source", "organization", "project_id", "sensor", "task_method", "location", "buffer", "latitude", "longitude", "date_time", "duration", "distance")
 
 #3. Load WildTrax data-----
 load(file.path(root, "Data", "WildTrax", "wildtrax_raw_2023-11-21.Rdata"))
 
 #4. Wrangle WT ARU data----
-#To do filter to QPAD list
-#Fix replace_tmtt error
-
+#fix a few names to match the GIS
 aru.use <- aru.wt %>% 
   wt_tidy_species() %>% 
-  wt_replace_tmtt() %>% 
+  wt_replace_tmtt() %>%
   wt_make_wide() %>% 
-  mutate(source="WildTrax") %>% 
-  mutate(buffer = as.numeric(ifelse(!buffer %in% c("50", "10000"), str_sub(buffer, -100, -2), buffer)),
-         buffer = ifelse(is.na(buffer), 0, buffer),
+  mutate(source="WildTrax",
+         sensor="ARU",
+         distance=Inf) %>% 
+  mutate(location_buffer_m = ifelse(is.na(location_buffer_m), 0, location_buffer_m),
          location = case_when(str_sub(location, 1, 4)=="1577" ~ paste0("1577B", str_sub(location, 5, 100)),
                               str_sub(location, 1, 7)=="OG-1600" ~ paste0("OG-ABMI-1600", str_sub(location, 8, 100)),
-                              !is.na(location) ~ location))
+                              !is.na(location) ~ location)) %>% 
+  rename(buffer = location_buffer_m,
+         date_time = recording_date_time,
+         duration = task_duration)
 
 #5. Wrangle WT PC data----
-#wrangle distance and duration maximums
 #remove counts with unknown duration and distance
 pc.use <- pc.wt %>% 
-  dplyr::filter(durationMethod!="UNKNOWN",
-                distanceMethod!="UNKNOWN") %>% 
-  wt_tidy_species() %>% 
+  dplyr::filter(survey_duration_method!="UNKNOWN",
+                survey_distance_method!="UNKNOWN") %>% 
+  wt_tidy_species()  %>% 
   wt_make_wide() %>% 
-  mutate(source="WildTrax") %>% 
-
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-
-
-
-
-#2b. Get the point count data----
-
-pc.wt.meth <- dat.wt %>% 
-  dplyr::filter(sensor=="PC") %>% 
-  dplyr::select(durationMethod, distanceMethod) %>% 
-  unique() %>% 
-  rowwise() %>% 
-  mutate(durationMethod = ifelse(str_sub(durationMethod, -1, -1)=="+", str_sub(durationMethod, -100, -2), durationMethod),
+  mutate(source="WildTrax",
+         sensor="PC",
+         task_method="PC") %>% 
+  rowwise() %>%
+  mutate(durationMethod = ifelse(str_sub(survey_duration_method, -1, -1)=="+",
+                                 str_sub(survey_duration_method, -100, -2),
+                                 survey_duration_method),
          chardur = str_locate_all(durationMethod, "-"),
          chardurmax = max(chardur),
-         duration = as.numeric(str_sub(durationMethod, chardurmax+1, -4)),
-         chardis = str_locate_all(distanceMethod, "-"),
+         task_duration = as.numeric(str_sub(durationMethod, chardurmax+1, -4))*60,
+         chardis = str_locate_all(survey_distance_method, "-"),
          chardismax = max(chardis),
-         distance1 = str_sub(distanceMethod, chardismax+1, -2),
-         distance = ifelse(distance1 %in% c("AR", "IN"), Inf, as.numeric(distance1))) %>% 
-  dplyr::select(distanceMethod, durationMethod, distance, duration)
-
-pc.wt <- dat.wt %>% 
-  dplyr::filter(sensor=="PC") %>% 
-  mutate(tagMethod = ifelse(distanceMethod=="0m-INF-ARU", "1SPT", "PC"),
-         equipment = "Human") %>% 
-  left_join(pc.wt.meth) %>% 
-  dplyr::select(all_of(colnms)) %>% 
-  data.frame()
-
-#2c. Get the aru data----
-#filter ARU data to first detection of each individual
-#wrangle duration
-#remove 'NONE' method
-#wrangle equipment type
-aru.wt.equip <- dat.wt %>% 
-  dplyr::filter(sensor=="ARU",
-                !is.na(equipment)) %>% 
-  dplyr::select(equipment) %>% 
-  unique() %>% 
-  rowwise() %>% 
-  mutate(equipmentend = str_locate(equipment, "\\("),
-         equipmentlong = str_sub(equipment, 1, equipmentend[,1]-1),
-         equipmentshort = case_when(equipmentlong=="?+" ~ "unknown",
-                                    str_detect(equipmentlong, "SM2")==TRUE ~ "SM2",
-                                    str_detect(equipmentlong, "SM3")==TRUE ~ "SM3",
-                                    str_detect(equipmentlong, "SM4")==TRUE ~ "SM4",
-                                    str_detect(equipmentlong, "mini")==TRUE ~ "mini",
-                                    str_detect(equipmentlong, "Mini")==TRUE ~ "mini",
-                                    is.na(equipmentlong) ~ "unknown"))
-
-aru.wt <- dat.wt %>% 
-  dplyr::filter(sensor=="ARU") %>% 
-  separate(method, into=c("duration", "tagMethod"), remove=TRUE) %>% 
-  dplyr::filter(tagMethod %in% c("1SPM", "1SPT")) %>% 
-  mutate(duration = as.numeric(str_sub(duration, -100, -2))/60,
-         distance = Inf) %>% 
-  group_by(source, organization, project, sensor, tagMethod, equipment, location, buffer, lat, lon, year, date, observer, duration, distance, species, abundance, isSeen, isHeard, individual_appearance_order) %>%
-  mutate(first_tag = min(tag_start_s)) %>%
-  ungroup() %>%
-  dplyr::filter(tag_start_s == first_tag) %>% 
-  left_join(aru.wt.equip) %>% 
-  dplyr::mutate(equipment = ifelse(is.na(equipmentshort), "unknown", equipmentshort),
-                isSeen = "f",
-                isHeard = "t") %>% 
-  dplyr::select(all_of(colnms))
-
-#2d. Replace TMTTs with predicted abundance----
-tmtt <- read.csv("C:/Users/elly/Documents/ABMI/WildTrax/TMTT/data/tmtt_predictions_mean.csv") %>% 
-  rename(species = species_code)
-
-tmtt.wt <- aru.wt %>% 
-  dplyr::filter(abundance=="TMTT") %>%
-  mutate(species = ifelse(species %in% tmtt$species, species, "species"),
-         observer_id = as.integer(ifelse(observer %in% tmtt$observer_id, observer, 0))) %>% 
-  data.frame() %>% 
-  left_join(tmtt) %>% 
-  mutate(abundance = round(pred)) %>% 
-  dplyr::select(colnames(aru.wt))
-
-#2e. Put back together----
-#summarize abundance
-use.wt <- aru.wt %>% 
-  dplyr::filter(abundance!="TMTT") %>% 
-  rbind(tmtt.wt) %>% 
-  rbind(pc.wt)
+         distance1 = str_sub(survey_distance_method, chardismax+1, -2),
+         task_distance = ifelse(distance1 %in% c("AR", "IN"), Inf, as.numeric(distance1))) %>%
+  ungroup() %>% 
+  rename(buffer = location_buffer_m,
+         date_time = survey_date)
   
 #3. Wrangle Riverforks data----
 
