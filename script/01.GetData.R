@@ -41,7 +41,7 @@ library(terra) #raster wrangling
 
 #2. Set root path for data on google drive----
 
-root <- "G:/My Drive/ABMI/Projects/BirdModels/"
+root <- "G:/My Drive/ABMI/Projects/BirdModels"
 
 #3. Login to WildTrax----
 config <- "script/00.WTlogin.R"
@@ -166,7 +166,6 @@ filtered <- auk_filter(filters, file=file.path(root, "Data/ebd_data_filtered.txt
 
 #C. HARMONIZE###############################
 
-#TO DO: FIX COLUMN SELECTION FOR WILDTRAX DATA####
 #TO DO: DECIDE ABOUT SEEN/HEARD SONG/CALL####
 
 #1. Get list of bird species----
@@ -183,167 +182,158 @@ load(file.path(root, "Data", "WildTrax", "wildtrax_raw_2023-11-21.Rdata"))
 
 #4. Wrangle WT ARU data----
 #fix a few names to match the GIS
-aru.use <- aru.wt %>% 
+use.aru <- aru.wt %>% 
   wt_tidy_species() %>% 
   wt_replace_tmtt() %>%
   wt_make_wide() %>% 
   mutate(source="WildTrax",
          sensor="ARU",
-         distance=Inf) %>% 
+         distance=Inf,
+         date_time = ymd_hms(recording_date_time),
+         duration = as.numeric(str_sub(task_duration, -100, -2))) %>% 
   mutate(location_buffer_m = ifelse(is.na(location_buffer_m), 0, location_buffer_m),
          location = case_when(str_sub(location, 1, 4)=="1577" ~ paste0("1577B", str_sub(location, 5, 100)),
                               str_sub(location, 1, 7)=="OG-1600" ~ paste0("OG-ABMI-1600", str_sub(location, 8, 100)),
                               !is.na(location) ~ location)) %>% 
-  rename(buffer = location_buffer_m,
-         date_time = recording_date_time,
-         duration = task_duration)
+  rename(buffer = location_buffer_m)
 
 #5. Wrangle WT PC data----
 #remove counts with unknown duration and distance
-pc.use <- pc.wt %>% 
+use.pc <- pc.wt %>% 
   dplyr::filter(survey_duration_method!="UNKNOWN",
                 survey_distance_method!="UNKNOWN") %>% 
   wt_tidy_species()  %>% 
-  wt_make_wide() %>% 
+  wt_make_wide(sensor="PC") %>% 
   mutate(source="WildTrax",
          sensor="PC",
-         task_method="PC") %>% 
+         task_method="PC",
+         date_time = ymd_hms(survey_date)) %>% 
   rowwise() %>%
   mutate(durationMethod = ifelse(str_sub(survey_duration_method, -1, -1)=="+",
                                  str_sub(survey_duration_method, -100, -2),
                                  survey_duration_method),
          chardur = str_locate_all(durationMethod, "-"),
          chardurmax = max(chardur),
-         task_duration = as.numeric(str_sub(durationMethod, chardurmax+1, -4))*60,
+         duration = as.numeric(str_sub(durationMethod, chardurmax+1, -4))*60,
          chardis = str_locate_all(survey_distance_method, "-"),
          chardismax = max(chardis),
          distance1 = str_sub(survey_distance_method, chardismax+1, -2),
-         task_distance = ifelse(distance1 %in% c("AR", "IN"), Inf, as.numeric(distance1))) %>%
+         distance = ifelse(distance1 %in% c("AR", "IN"), Inf, as.numeric(distance1))) %>%
   ungroup() %>% 
-  rename(buffer = location_buffer_m,
-         date_time = survey_date)
+  rename(buffer = location_buffer_m)
   
-#3. Wrangle Riverforks data----
+#6. Wrangle Riverforks data----
 
-#3a. Read it in-----
-det.rf <- read.csv(file.path(root, "Data", "Riverforks", "M_RT_BIRD_COUNT_202301161601.csv"), header=TRUE)
+#6a. Read it in-----
+det.rf <- read.csv(file.path(root, "Data", "Riverforks", "RT_BIRD_COUNT_BL.csv"), header=TRUE)
 loc.rf <- read.csv(file.path(root, "Data", "Riverforks", "A_RT_SITE_PHYCHAR_202301161554.csv"), header=TRUE)
 
-#3b. Put together----
+#6b. Put together----
 #concatenate site name with point count # (there are 9 per site) before joining
 raw.rf <- det.rf %>%
-  mutate(SITE = paste0(SITE, "-", TBB_POINT_COUNT)) %>% 
+  mutate(SITE = paste0(SITE, "-", TBB_POINT_COUNT),
+         YEAR = as.integer(YEAR)) %>% 
   left_join(loc.rf %>% 
               mutate(SITE = paste0(SITE, "-", TSFG_POINT_COUNT)) %>% 
               dplyr::select(ROTATION, SITE, YEAR, SITE_LATITUDE, SITE_LONGITUDE) %>% 
               unique())
 
-#3c. Get the taxonomy lookup----
-tax.wt <- read.csv(file.path(root, "Data", "lookups", "lu_species.csv")) %>% 
-  mutate(SCIENTIFIC_NAME = paste(species_genus, species_name)) %>% 
-  rename(species = species_code, COMMON_NAME = species_common_name) %>% 
-  dplyr::select(COMMON_NAME, SCIENTIFIC_NAME, species) %>% 
-  unique() %>% 
-  dplyr::filter(nchar(species)==4)
-
-#3d. Harmonize----
+#6c. Wrangle----
+#remove visits with no time data
 use.rf <- raw.rf %>% 
-  rename(location=SITE, lat = SITE_LATITUDE, lon = SITE_LONGITUDE, year = YEAR, observer = ANALYST) %>% 
+  rename(location=SITE, latitude = SITE_LATITUDE, longitude = SITE_LONGITUDE, observer = ANALYST, species_common_name = COMMON_NAME) %>% 
   mutate(source = "riverforks",
          organization="ABMI",
-         project="ABMI-Riverforks",
+         project_id=9998,
          sensor="ARU",
-         tagMethod = "1SPM",
-         equipment="riverforks",
+         task_method = "1SPM",
          buffer = 5500,
-         duration = 3,
+         duration = 3*60,
          distance = Inf,
          abundance = 1,
-         date = ymd_hm(paste0(ADATE, " ", TBB_START_TIME)),
-         isSeen = "f",
-         isHeard = "t") %>% 
-  left_join(tax.wt) %>% 
-  dplyr::select(all_of(colnms))
+         date_time = ymd_hm(paste0(ADATE, " ", TBB_START_TIME))) %>% 
+  dplyr::filter(!is.na(date_time)) %>% 
+  left_join(species %>% 
+              dplyr::select(species_code, species_common_name)) %>% 
+  dplyr::select(all_of(colnms), species_code, abundance) %>% 
+  pivot_wider(names_from=species_code, values_from=abundance, values_fn=sum, values_fill=0)
 
-#4. Wrangle ebird data----
+#7. Wrangle ebird data----
 #Note this assumes observations with "X" individuals are 1s
 #Filter out hotspots
 #Replace common name with alpha code
 
+#7a. Read it in----
 raw.ebd <- read_ebd(file.path(root, "Data", "ebd", "ebd_data_filtered.txt"))
 
-tax.wt <- read.csv(file.path(root, "Data", "lookups", "lu_species.csv")) %>% 
-  mutate(scientific_name = paste(species_genus, species_name)) %>% 
-  rename(species = species_code, common_name = species_common_name) %>% 
-  dplyr::select(scientific_name, common_name, species) %>% 
-  unique() %>% 
-  dplyr::filter(nchar(species)==4)
-
+#7b. Wrangle----
 use.ebd <- raw.ebd %>% 
   dplyr::filter(locality_type!="H") %>% 
   mutate(source = "eBird",
          organization = "eBird",
-         project="eBird",
+         project_id=99999,
          sensor="PC",
-         tagMethod="PC",
-         equipment="human",
-         singlesp="n",
+         task_method="PC",
          buffer=0,
-         date = ymd_hms(paste0(observation_date, time_observations_started)),
-         year = year(date),
+         date_time = ymd_hms(paste0(observation_date, time_observations_started)),
          distance = Inf,
          abundance = as.numeric(ifelse(observation_count=="X", 1, observation_count)),
-         isSeen = NA,
-         isHeard = NA) %>% 
-  rename(lat = latitude,
-         lon = longitude,
-         observer = observer_id,
-         duration = duration_minutes,
-         location = checklist_id) %>% 
-  left_join(tax.wt) %>% 
-  dplyr::select(all_of(colnms))
+         duration = duration_minutes*60) %>% 
+  rename(observer = observer_id,
+         location = checklist_id,
+         species_common_name = common_name) %>% 
+  left_join(species %>% 
+              dplyr::select(species_code, species_common_name)) %>% 
+  dplyr::select(all_of(colnms), species_code, abundance) %>% 
+  pivot_wider(names_from=species_code, values_from=abundance, values_fn=sum, values_fill=0)
 
 #E. PUT TOGETHER############################
 
 #1. Put everything together----
-use <- rbind(use.wt, use.rf, use.ebd)
+use <- data.table::rbindlist(list(use.aru, use.pc, use.rf, use.ebd), fill=TRUE) %>% 
+  dplyr::select(all_of(c(colnms, spp))) %>% 
+  dplyr::filter(!is.na(latitude))
 
 #2. Clip by provincial boundaries & filter to AB----
-use.visit <- use %>% 
-  dplyr::select(-species, -abundance, -isSeen, -isHeard) %>% 
-  unique() %>% 
-  dplyr::filter(!is.na(lon),
-                !is.na(lat))
 
-#Download provincial boundaries shapefile
-temp <- tempfile()
-download("https://www12.statcan.gc.ca/census-recensement/2021/geo/sip-pis/boundary-limites/files-fichiers/lpr_000b21a_e.zip", temp)
-unzip(zipfile=temp, exdir=file.path(root, "Data", "gis"))
-unlink(temp)
+#Download provincial boundaries shapefile - only need to do this one
+# temp <- tempfile()
+# download("https://www12.statcan.gc.ca/census-recensement/2021/geo/sip-pis/boundary-limites/files-fichiers/lpr_000b21a_e.zip", temp)
+# unzip(zipfile=temp, exdir=file.path(root, "Data", "gis"))
+# unlink(temp)
 
 #Filter to Alberta
 shp <- read_sf(file.path(root, "Data", "gis", "lpr_000b21a_e.shp")) %>% 
-  dplyr::filter(PRNAME=="Alberta") %>% 
-  vect()
+  dplyr::filter(PRNAME=="Alberta")
 
 #Create rasters (much faster than from polygon)
 r <- rast(ext(shp), resolution=1000, crs=crs(shp))
-ab <- rasterize(x=shp, y=r, field="PRNAME")
+ab <- rasterize(x=vect(shp), y=r, field="PRNAME")
 
 #Extract raster value
-visit.ab <- use.visit %>% 
-  st_as_sf(coords=c("lon", "lat"), crs=4326) %>% 
+use.ab.r <- use %>% 
+  dplyr::filter(!is.na(longitude)) %>% 
+  st_as_sf(coords=c("longitude", "latitude"), crs=4326) %>% 
   st_transform(crs=crs(ab)) %>% 
   vect() %>% 
   extract(x=ab) %>% 
-  cbind(use.visit) %>% 
+  cbind(use %>% 
+          dplyr::filter(!is.na(longitude)) %>% 
+          dplyr::select(source:distance)) %>% 
   dplyr::filter(PRNAME=="Alberta") %>% 
-  dplyr::select(colnames(use.visit))
-
+  dplyr::select(source:distance)
+  
 #apply to bird data and clip again by shp for precision
+shp.4326 <- st_transform(shp, crs=4326)
+
 use.ab <- use %>% 
-  inner_join(visit.ab) %>% 
-  st_intersection(shp)
+  inner_join(unique(use.ab.r), multiple="all") %>% 
+  st_as_sf(coords=c("longitude", "latitude"), crs=4326, remove=FALSE) %>%  
+  st_intersection(st_transform(shp, crs=4326)) %>% 
+  st_drop_geometry() %>% 
+  dplyr::select(colnames(use)) %>% 
+  rbind(use %>% 
+          dplyr::filter(is.na(longitude)))
 
 #3. Remove duplicate surveys----
 
