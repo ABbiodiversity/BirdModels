@@ -63,10 +63,8 @@ projects <- wt_get_download_summary(sensor_id = 'PC')
 instructions <- read.csv(file.path(root, "Data", "projectInventory", "projectInstructions.csv"))
 
 projects.use <- projects %>% 
-  left_join(instructions) %>%
-  mutate(instruction = ifelse(is.na(instruction), "NO RESTRICTION", instruction)) %>% 
   dplyr::filter(organization!="BU-TRAINING",
-                !instruction %in% c("DO NOT USE", "SINGLE SPECIES"))
+                !project_id %in% instructions$project_id)
 
 #3. Loop through projects to download data----
 aru.list <- list()
@@ -78,7 +76,7 @@ for(i in 1:nrow(projects.use)){
   wt_auth()
   
   #Do each sensor type separately because the reports have different columns and we need different things for each sensor type
-  if(projects$sensor[i]=="ARU"){
+  if(projects.use$sensor[i]=="ARU"){
     
     dat.try <- try(wt_download_report(project_id = projects.use$project_id[i], sensor_id = projects.use$sensor[i], weather_cols = F, report = "main"))
     
@@ -88,7 +86,7 @@ for(i in 1:nrow(projects.use)){
     
   }
   
-  if(projects$sensor[i]=="PC"){
+  if(projects.use$sensor[i]=="PC"){
     
     dat.try <- try(wt_download_report(project_id = projects.use$project_id[i], sensor_id = projects.use$sensor[i], weather_cols = F, report="main"))
     
@@ -136,7 +134,7 @@ for(i in 1:length(error.files.pc)){
 #Take out ARU projects with "None" method
 aru.wt <- rbindlist(aru.list[], fill=TRUE)  %>% 
   rbind(aru.error, fill=TRUE) %>% 
-  left_join(projects %>% 
+  left_join(projects.use %>% 
               dplyr::rename(project_status = status)) %>% 
   dplyr::filter(task_method!="None")
 
@@ -302,7 +300,7 @@ use <- data.table::rbindlist(list(use.aru, use.pc, use.rf, use.ebd), fill=TRUE) 
 # unzip(zipfile=temp, exdir=file.path(root, "Data", "gis"))
 # unlink(temp)
 
-#Filter to Alberta
+#2a. Get boundaries----
 shp <- read_sf(file.path(root, "Data", "gis", "lpr_000b21a_e.shp")) %>% 
   dplyr::filter(PRNAME=="Alberta")
 
@@ -310,7 +308,7 @@ shp <- read_sf(file.path(root, "Data", "gis", "lpr_000b21a_e.shp")) %>%
 r <- rast(ext(shp), resolution=1000, crs=crs(shp))
 ab <- rasterize(x=vect(shp), y=r, field="PRNAME")
 
-#Extract raster value
+#2b. Extract raster value----
 use.ab.r <- use %>% 
   dplyr::filter(!is.na(longitude)) %>% 
   st_as_sf(coords=c("longitude", "latitude"), crs=4326) %>% 
@@ -323,9 +321,7 @@ use.ab.r <- use %>%
   dplyr::filter(PRNAME=="Alberta") %>% 
   dplyr::select(source:distance)
   
-#apply to bird data and clip again by shp for precision
-shp.4326 <- st_transform(shp, crs=4326)
-
+#2c. Apply to bird data and clip again by shp for precision
 use.ab <- use %>% 
   inner_join(unique(use.ab.r), multiple="all") %>% 
   st_as_sf(coords=c("longitude", "latitude"), crs=4326, remove=FALSE) %>%  
@@ -339,16 +335,19 @@ use.ab <- use %>%
 
 #3a. Investigate----
 #Take out buffered locations
-visit.dup <- visit.ab %>% 
-  mutate(latr = round(lat, 4),
-         lonr = round(lon, 4)) %>% 
-  group_by(date, latr, lonr) %>% 
+use.dup <- use.ab %>% 
+  dplyr::filter(!is.na(longitude)) %>% 
+  mutate(latr = round(latitude, 4),
+         lonr = round(longitude, 4)) %>% 
+  group_by(date_time, latr, lonr) %>% 
   summarize(n = n()) %>% 
   ungroup() %>% 
   dplyr::filter(n > 1) %>% 
-  left_join(visit.ab %>% 
-              mutate(latr = round(lat, 4),
-                     lonr = round(lon, 4)))
+  left_join(use.ab %>% 
+              dplyr::select(all_of(colnms)) %>% 
+              mutate(latr = round(latitude, 4),
+                     lonr = round(longitude, 4)),
+            multiple="all")
 #no eBird duplicates
 #some point count data entry errors, but really only 2 sources of duplicates:
 #1. JOSM points that have human & ARU data & eBird data
@@ -356,119 +355,125 @@ visit.dup <- visit.ab %>%
 
 #3b. Identify JOSM points with human & ARU data----
 #Keep the ARU ones because frankly they're probably better data
-visit.josm <- visit.dup %>% 
+use.josm <- use.dup %>% 
+  left_join(projects.use) %>% 
   dplyr::filter(project %in% c("JOSM ECCC Cause and Effect Monitoring for Landbirds 2013",
                                "Oil Sands Monitoring CWS Prairie Region 2012",
                                "Oil Sands Monitoring CWS Prairie Region 2013",
                                "Oilsands Monitoring CWS Prairie Region 2014"))
 
-visit.josm.remove <- visit.josm %>% 
+use.josm.remove <- use.josm %>% 
   dplyr::filter(sensor=="PC")
 
 #3c. Identify recordings that have been processed twice----
 #Use recording with longer duration processing, random if processing is equal
-visit.duprec <- visit.dup %>% 
+use.duprec <- use.dup %>% 
   dplyr::filter(sensor=="ARU") %>% 
-  left_join(visit.ab %>% 
-              mutate(latr = round(lat, 4),
-                     lonr = round(lon, 4))) %>% 
-  group_by(date, lat, lon, location) %>% 
+  left_join(use.ab %>% 
+              mutate(latr = round(latitude, 4),
+                     lonr = round(longitude, 4)) %>% 
+              dplyr::select(all_of(colnms)),
+            multiple="all") %>% 
+  group_by(date_time, latitude, longitude, location) %>% 
   summarize(n=n(),
             maxdur = max(duration),
             mindur = min(duration)) %>% 
-  left_join(visit.ab)
+  left_join(use.ab,
+            multiple="all")
 
-visit.mindur.remove <- visit.duprec %>% 
+use.mindur.remove <- use.duprec %>% 
   dplyr::filter(mindur!=maxdur,
                 duration==mindur)
   
 set.seed(1234)
-visit.eqdur.remove <- visit.duprec %>% 
+use.eqdur.remove <- use.duprec %>% 
   dplyr::filter(mindur==maxdur) %>% 
-  group_by(date, lat, lon, location) %>% 
+  group_by(date_time, latitude, longitude, location) %>% 
   sample_n(1) %>% 
   ungroup() %>% 
-  left_join(visit.ab)
+  left_join(use.ab,
+            multiple="all")
 
 #3d. Look at remaining duplicates----
-visit.dup2 <- visit.ab %>% 
-  anti_join(visit.josm.remove) %>% 
-  anti_join(visit.mindur.remove) %>% 
-  anti_join(visit.eqdur.remove) %>% 
-  mutate(latr = round(lat, 4),
-         lonr = round(lon, 4)) %>% 
-  group_by(date, latr, lonr) %>% 
+use.dup2 <- use.ab %>% 
+  dplyr::filter(!is.na(longitude)) %>% 
+  anti_join(use.josm.remove) %>% 
+  anti_join(use.mindur.remove) %>% 
+  anti_join(use.eqdur.remove) %>% 
+  mutate(latr = round(latitude, 4),
+         lonr = round(longitude, 4)) %>% 
+  group_by(date_time, latr, lonr) %>% 
   summarize(n = n()) %>% 
   ungroup() %>% 
   dplyr::filter(n > 1) %>% 
-  left_join(visit.ab %>% 
-              mutate(latr = round(lat, 4),
-                     lonr = round(lon, 4)))
+  left_join(use.ab  %>% 
+              mutate(latr = round(latitude, 4),
+                     lonr = round(longitude, 4)),
+            multiple="all")
 
 #3e. Take out the ebird duplicates----
-visit.ebird.remove <- visit.dup2 %>% 
+use.ebird.remove <- use.dup2 %>% 
   dplyr::filter(source=="eBird")
 
 #3f. Look at duplicates again----
-visit.dup3 <- visit.ab %>% 
-  anti_join(visit.josm.remove) %>% 
-  anti_join(visit.mindur.remove) %>% 
-  anti_join(visit.eqdur.remove) %>% 
-  anti_join(visit.ebird.remove) %>% 
-  mutate(latr = round(lat, 4),
-         lonr = round(lon, 4)) %>% 
-  group_by(date, latr, lonr) %>% 
+use.dup3 <- use.ab %>% 
+  dplyr::filter(!is.na(longitude)) %>% 
+  anti_join(use.josm.remove) %>% 
+  anti_join(use.mindur.remove) %>% 
+  anti_join(use.eqdur.remove) %>% 
+  anti_join(use.ebird.remove) %>% 
+  mutate(latr = round(latitude, 4),
+         lonr = round(longitude, 4)) %>% 
+  group_by(date_time, latr, lonr) %>% 
   summarize(n = n()) %>% 
   ungroup() %>% 
   dplyr::filter(n > 1) %>% 
-  left_join(visit.ab %>% 
-              mutate(latr = round(lat, 4),
-                     lonr = round(lon, 4)))
+  left_join(use.ab %>% 
+              mutate(latr = round(latitude, 4),
+                     lonr = round(longitude, 4)),
+            multiple="all") %>% 
+  arrange(latr, lonr, date_time) %>% 
+  left_join(projects.use)
 
 set.seed(1234)
-visit.dup3.keep <- visit.dup3 %>% 
-  group_by(latr, lonr, date, n) %>% 
+use.dup3.keep <- use.dup3 %>% 
+  group_by(latr, lonr, date_time, n) %>% 
   sample_n(1) %>% 
   ungroup()
 
-visit.dup3.remove <- visit.dup3 %>% 
-  anti_join(visit.dup3.keep)
+use.dup3.remove <- use.dup3 %>% 
+  anti_join(use.dup3.keep)
 
 #3g. Check again----
-visit.dup4 <- visit.ab %>% 
-  anti_join(visit.josm.remove) %>% 
-  anti_join(visit.mindur.remove) %>% 
-  anti_join(visit.eqdur.remove) %>% 
-  anti_join(visit.ebird.remove) %>% 
-  anti_join(visit.dup3.remove) %>% 
-  mutate(latr = round(lat, 4),
-         lonr = round(lon, 4)) %>% 
-  group_by(date, latr, lonr) %>% 
+use.dup4 <- use.ab %>% 
+  dplyr::filter(!is.na(longitude)) %>% 
+  anti_join(use.josm.remove) %>% 
+  anti_join(use.mindur.remove) %>% 
+  anti_join(use.eqdur.remove) %>% 
+  anti_join(use.ebird.remove) %>% 
+  anti_join(use.dup3.remove) %>% 
+  mutate(latr = round(latitude, 4),
+         lonr = round(longitude, 4)) %>% 
+  group_by(date_time, latr, lonr) %>% 
   summarize(n = n()) %>% 
   ungroup() %>% 
   dplyr::filter(n > 1) %>% 
-  left_join(visit.ab %>% 
-              mutate(latr = round(lat, 4),
-                     lonr = round(lon, 4)))
+  left_join(use.ab %>% 
+              dplyr::select(all_of(colnms)) %>% 
+              mutate(latr = round(latitude, 4),
+                     lonr = round(longitude, 4)),
+            multiple="all")
 
 #3h. Filter out duplicates from dataset----
 #remove surveys before 1993 (first year with substantial data)
 #create unique ID
-visit <- visit.ab %>% 
-  anti_join(visit.josm.remove) %>% 
-  anti_join(visit.mindur.remove) %>% 
-  anti_join(visit.eqdur.remove) %>% 
-  anti_join(visit.ebird.remove) %>% 
-  anti_join(visit.dup3.remove) %>% 
-  dplyr::filter(year >= 1993) %>% 
-  mutate(gisid = paste0(location, "_", year))
-
-bird <- use.ab %>% 
-  anti_join(visit.josm.remove) %>% 
-  anti_join(visit.mindur.remove) %>% 
-  anti_join(visit.eqdur.remove) %>% 
-  anti_join(visit.ebird.remove) %>% 
-  anti_join(visit.dup3.remove) %>% 
+use <- use.ab %>% 
+  anti_join(use.josm.remove) %>% 
+  anti_join(use.mindur.remove) %>% 
+  anti_join(use.eqdur.remove) %>% 
+  anti_join(use.ebird.remove) %>% 
+  anti_join(use.dup3.remove) %>% 
+  mutate(year = year(date_time)) %>% 
   dplyr::filter(year >= 1993) %>% 
   mutate(gisid = paste0(location, "_", year))
 
@@ -476,44 +481,48 @@ bird <- use.ab %>%
 
 #1. Identify projects with buffered locations----
 #Any project with buffer of 55000
-secret1 <- visit %>% 
+secret1 <- use %>% 
   dplyr::filter(organization=="ABMI", buffer==5500) %>% 
-  select(organization, project) %>% 
-  unique()
+  select(organization, project_id) %>% 
+  unique() %>% 
+  left_join(projects.use %>% 
+              dplyr::select(project, project_id))
 
 #projects that have the same lat lon for more than one location
-secret2 <- visit %>% 
+secret2 <- use %>% 
   dplyr::filter(organization=="ABMI") %>% 
-  dplyr::select(organization, project, location, lat, lon) %>% 
+  dplyr::select(organization, project_id, location, latitude, longitude) %>% 
   unique() %>% 
-  group_by(organization, project, lat, lon) %>% 
+  group_by(organization, project_id, latitude, longitude) %>% 
   summarize(n=n()) %>% 
   ungroup() %>% 
   dplyr::filter(n > 1) %>% 
   anti_join(secret1) %>% 
-  dplyr::select(organization, project) %>% 
-  unique()
+  dplyr::select(organization, project_id) %>% 
+  unique() %>% 
+  left_join(projects.use %>% 
+              dplyr::select(project, project_id))
 
 secret <- rbind(secret1, secret2) %>% 
-  mutate(topsecret = 1)
+  mutate(topsecret = 1,
+         project = ifelse(is.na(project), "ABMI-Riverforks", project))
 
 #2. Filter to just unique combinations of year & location----
-location <- visit %>% 
-  dplyr::select(gisid, source, organization, sensor, project, buffer, location, lat, lon, year) %>% 
+location <- use %>% 
+  dplyr::select(gisid, source, organization, sensor, project_id, buffer, location, latitude, longitude, year) %>% 
   unique() %>% 
   left_join(secret) %>% 
   mutate(topsecret = ifelse(is.na(topsecret), 0, topsecret))
 
 #3. Check Riverforks for inconsistency with GIS data----
-gis <- read.csv(file.path(root, "Data", "gis", "topsecret_inventory.csv"))
+gis <- read.csv(file.path(root, "Data", "gis", "topsecret_inventory.csv")) %>% 
+  rename(year = year_) %>% 
+  mutate(gisid = paste0(location, "_", year))
 
 check <- location %>% 
   dplyr::filter(topsecret==1,
                 project=="ABMI-Riverforks") %>% 
-  full_join(gis %>% 
-              rename(gisid = match_,
-                     year = year_) %>% 
-              dplyr::filter(gisid!=""))
+  anti_join(gis)
 summary(check$NameFixed) #No NAs - good
 
 #4. Check that location name fixes worked----
@@ -525,7 +534,7 @@ summary(location.fix$NameFixed) #No NAs - good
 write.csv(location, file.path(root, "Data", "gis", "birds_ab_locations.csv"), row.names = FALSE)
 
 #G. SAVE!#############################
-save(location, visit, bird, file=file.path(root, "Data", "1Harmonized.Rdata"))
+save(location, use, file=file.path(root, "Data", "1Harmonized.Rdata"))
   
 #H. COMPARE############################
 load(file.path(root, "data/ab-birds-all-2020-09-23.Rdata"))
