@@ -22,7 +22,7 @@ library(opticut) #For lorenz curve in model
 root <- "G:/My Drive/ABMI/Projects/BirdModels/"
 
 #3. Load harmonized set----
-load(file.path(root, "Data", "ab-birds-all-2022-03-09.Rdata"))
+load(file.path(root, "Data", "Archive", "ab-birds-all-2022-03-09.Rdata"))
 
 #4. Load functions----
 source("script/00.Functions.R")
@@ -291,7 +291,7 @@ dd$wtAge05 <- sqrt(dd$wtAge)
 #G. FORESTRY CONVERGENCE####
 
 #1. fCC1: linear----
-MAXFOR <- 50/200 #Is this age when forestry converges with fire???
+MAXFOR <- 50/200 #Years when forestry converges with fire
 dd$fCC1 <- 0
 dd$fCC1[dd$isCC==1] <- pmax(0, 1 - (dd$isCC * dd$wtAge/MAXFOR)[dd$isCC==1])
 plot(fCC1 ~ wtAge, dd[dd$isCC==1,])
