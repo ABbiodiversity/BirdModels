@@ -60,7 +60,8 @@ projects <- wt_get_download_summary(sensor_id = 'PC')
 #nothing in BU training & all "DO NOT USE" projects in projectInventory file
 #filter out 'NONE' method ARU projects later after this field is parsed out
 
-instructions <- read.csv(file.path(root, "Data", "projectInventory", "projectInstructions.csv"))
+instructions <- read.csv(file.path(root, "Data", "projectInventory", "projectInstructions.csv")) %>%  
+  dplyr::filter(instruction!="ABMI ONLY")
 
 projects.use <- projects %>% 
   dplyr::filter(organization!="BU-TRAINING",
@@ -133,18 +134,20 @@ for(i in 1:length(error.files.pc)){
 #6. Collapse lists----
 #Take out ARU projects with "None" method
 aru.wt <- rbindlist(aru.list[], fill=TRUE)  %>% 
-  rbind(aru.error, fill=TRUE) %>% 
+  rbind(aru.error, fill=TRUE) %>%
   left_join(projects.use %>% 
               dplyr::rename(project_status = status)) %>% 
   dplyr::filter(task_method!="None")
 
 pc.wt <- rbindlist(pc.list[], fill=TRUE)  %>% 
-  rbind(pc.error, fill=TRUE) %>% 
+ rbind(pc.error, fill=TRUE) %>%
   left_join(projects %>% 
               dplyr::rename(project_status = status))
 
 #7. Save date stamped data & project list----
 save(aru.wt, pc.wt, projects.use, error.log, file=paste0(root, "/Data/WildTrax/wildtrax_raw_", Sys.Date(), ".Rdata"))
+
+save(aru.wt, pc.wt, projects.use, error.log, file=paste0(root, "/Data/WildTrax/wildtrax_raw_", "2023-11-21", ".Rdata"))
 
 #B. GET EBIRD DATA##########################
 
@@ -249,7 +252,7 @@ use.rf <- raw.rf %>%
          duration = 3*60,
          distance = Inf,
          abundance = 1,
-         date_time = ymd_hm(paste0(ADATE, " ", TBB_START_TIME))) %>% 
+         date_time = dmy_hm(paste0(ADATE, " ", TBB_START_TIME))) %>% 
   dplyr::filter(!is.na(date_time)) %>% 
   left_join(species %>% 
               dplyr::select(species_code, species_common_name)) %>% 
@@ -475,7 +478,7 @@ use <- use.ab %>%
   anti_join(use.dup3.remove) %>% 
   mutate(year = year(date_time)) %>% 
   dplyr::filter(year >= 1993) %>% 
-  mutate(gisid = paste0(location, "_", year))
+  mutate(gisid = paste0(location, "_", project_id, "_", year))
 
 #F. IDENTIFY LOCATIONS FOR COVARIATE EXTRACTION####
 
@@ -510,32 +513,36 @@ secret <- rbind(secret1, secret2) %>%
 #2. Filter to just unique combinations of year & location----
 location <- use %>% 
   dplyr::select(gisid, source, organization, sensor, project_id, buffer, location, latitude, longitude, year) %>% 
+  left_join(projects.use %>% 
+              dplyr::select(project, project_id)) %>% 
+  mutate(project = case_when(project_id==9998 ~ "ABMI-Riverforks",
+                             project_id==99999 ~ "eBird", 
+                             !is.na(project) ~ project)) %>% 
   unique() %>% 
   left_join(secret) %>% 
-  mutate(topsecret = ifelse(is.na(topsecret), 0, topsecret))
+  mutate(topsecret = ifelse(is.na(topsecret), 0, topsecret)) 
 
-#3. Check Riverforks for inconsistency with GIS data----
-gis <- read.csv(file.path(root, "Data", "gis", "topsecret_inventory.csv")) %>% 
-  rename(year = year_) %>% 
-  mutate(gisid = paste0(location, "_", year))
-
-check <- location %>% 
-  dplyr::filter(topsecret==1,
-                project=="ABMI-Riverforks") %>% 
-  anti_join(gis)
-summary(check$NameFixed) #No NAs - good
-
-#4. Check that location name fixes worked----
-location.fix <- gis %>% 
-  dplyr::filter(NameFixed=="yes") %>% 
-  left_join(location)
-summary(location.fix$NameFixed) #No NAs - good
-
+#3. Save----
 write.csv(location, file.path(root, "Data", "gis", "birds_ab_locations.csv"), row.names = FALSE)
 
 #G. SAVE!#############################
 save(location, use, file=file.path(root, "Data", "1Harmonized.Rdata"))
   
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 #H. COMPARE############################
 load(file.path(root, "data/ab-birds-all-2020-09-23.Rdata"))
 load(file.path(root, "data/Harmonized.Rdata"))
