@@ -195,6 +195,7 @@ use.aru <- aru.wt %>%
   mutate(location_buffer_m = ifelse(is.na(location_buffer_m), 0, location_buffer_m),
          location = case_when(str_sub(location, 1, 4)=="1577" ~ paste0("1577B", str_sub(location, 5, 100)),
                               str_sub(location, 1, 7)=="OG-1600" ~ paste0("OG-ABMI-1600", str_sub(location, 8, 100)),
+                              str_sub(location, 1, 7)=="ABMI-OG" ~ paste0("OG-", str_sub(location, 8, 100)),
                               !is.na(location) ~ location)) %>% 
   rename(buffer = location_buffer_m)
 
@@ -241,6 +242,7 @@ raw.rf <- det.rf %>%
 
 #6c. Wrangle----
 #remove visits with no time data
+#fix some names to match the gis
 use.rf <- raw.rf %>% 
   rename(location=SITE, latitude = SITE_LATITUDE, longitude = SITE_LONGITUDE, observer = ANALYST, species_common_name = COMMON_NAME) %>% 
   mutate(source = "riverforks",
@@ -253,6 +255,8 @@ use.rf <- raw.rf %>%
          distance = Inf,
          abundance = 1,
          date_time = dmy_hm(paste0(ADATE, " ", TBB_START_TIME))) %>% 
+  mutate(location = case_when(str_sub(location, 1, 12) %in% c("OG-ABMI-479-", "OG-ABMI-665-", "OG-ABMI-1057") ~ gsub(x=location, pattern="-1-", replacement="-11-"),
+         !is.na(location) ~ location)) %>% 
   dplyr::filter(!is.na(date_time)) %>% 
   left_join(species %>% 
               dplyr::select(species_code, species_common_name)) %>% 
