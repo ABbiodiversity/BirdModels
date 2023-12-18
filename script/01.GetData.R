@@ -192,11 +192,7 @@ use.aru <- aru.wt %>%
          distance=Inf,
          date_time = ymd_hms(recording_date_time),
          duration = as.numeric(str_sub(task_duration, -100, -2))) %>% 
-  mutate(location_buffer_m = ifelse(is.na(location_buffer_m), 0, location_buffer_m),
-         location = case_when(str_sub(location, 1, 4)=="1577" ~ paste0("1577B", str_sub(location, 5, 100)),
-                              str_sub(location, 1, 7)=="OG-1600" ~ paste0("OG-ABMI-1600", str_sub(location, 8, 100)),
-                              str_sub(location, 1, 7)=="ABMI-OG" ~ paste0("OG-", str_sub(location, 8, 100)),
-                              !is.na(location) ~ location)) %>% 
+  mutate(location_buffer_m = ifelse(is.na(location_buffer_m), 0, location_buffer_m)) %>% 
   rename(buffer = location_buffer_m)
 
 #5. Wrangle WT PC data----
@@ -243,6 +239,7 @@ raw.rf <- det.rf %>%
 #6c. Wrangle----
 #remove visits with no time data
 #fix some names to match the gis
+#fix some dates to match the gis
 use.rf <- raw.rf %>% 
   rename(location=SITE, latitude = SITE_LATITUDE, longitude = SITE_LONGITUDE, observer = ANALYST, species_common_name = COMMON_NAME) %>% 
   mutate(source = "riverforks",
@@ -255,9 +252,9 @@ use.rf <- raw.rf %>%
          distance = Inf,
          abundance = 1,
          date_time = dmy_hm(paste0(ADATE, " ", TBB_START_TIME))) %>% 
-  mutate(location = case_when(str_sub(location, 1, 12) %in% c("OG-ABMI-479-", "OG-ABMI-665-", "OG-ABMI-1057") ~ gsub(x=location, pattern="-1-", replacement="-11-"),
-         !is.na(location) ~ location)) %>% 
   dplyr::filter(!is.na(date_time)) %>% 
+  mutate(date_time = case_when(str_sub(location, 1, 4)=="1525" ~ dmy_hm(paste0(str_sub(ADATE, -100, -3), "07", " ", TBB_START_TIME)),
+         !is.na(date_time) ~ date_time)) %>% 
   left_join(species %>% 
               dplyr::select(species_code, species_common_name)) %>% 
   dplyr::select(all_of(colnms), species_code, abundance) %>% 
@@ -473,7 +470,13 @@ use.dup4 <- use.ab %>%
 
 #3h. Filter out duplicates from dataset----
 #remove surveys before 1993 (first year with substantial data)
+#remove ABMI surveys that can't resolve with GIS data
 #create unique ID
+#Fix location naming errors
+
+fix <- read.csv(file.path(root, "Data", "gis", "birds_mismatches_lookup.csv")) %>% 
+  dplyr::filter(locationfix!="")
+
 use <- use.ab %>% 
   anti_join(use.josm.remove) %>% 
   anti_join(use.mindur.remove) %>% 
@@ -481,8 +484,11 @@ use <- use.ab %>%
   anti_join(use.ebird.remove) %>% 
   anti_join(use.dup3.remove) %>% 
   mutate(year = year(date_time)) %>% 
-  dplyr::filter(year >= 1993) %>% 
-  mutate(gisid = paste0(location, "_", project_id, "_", year))
+  dplyr::filter(year >= 1993) %>%  
+  dplyr::filter(!(location=="701-1" & year==2004)) %>% 
+  mutate(gisid = paste0(location, "_", project_id, "_", year)) %>% 
+  left_join(fix) %>% 
+  mutate(location = ifelse(!is.na(locationfix), locationfix, location))
 
 #F. IDENTIFY LOCATIONS FOR COVARIATE EXTRACTION####
 
@@ -526,7 +532,31 @@ location <- use %>%
   left_join(secret) %>% 
   mutate(topsecret = ifelse(is.na(topsecret), 0, topsecret)) 
 
-#3. Save----
+#3. Check against GIS inventory----
+gis <- read.csv(file.path(root, "Data", "gis", "OffGridCamARU_Analysis_camaru_20231208.csv"))
+
+missing <- read.csv(file.path(root, "Data", "gis", "birds_mismatches_lookup.csv")) %>% 
+  dplyr::filter(locationfix=="")
+
+gis.location <- location %>% 
+  dplyr::filter(topsecret==1) %>% 
+  left_join(gis %>% 
+              rename(location = Site_ID,
+                     year = survey_year) %>% 
+               mutate(gis=1,
+                     location = case_when(str_sub(location, 1, 5)=="OG-EI" ~ Site,
+                                          !is.na(location) ~ location)),
+             multiple="all") %>% 
+  mutate(gis = ifelse(is.na(gis), 0, 1))
+
+gis.na <- dplyr::filter(gis.location, gis==0) %>% 
+  arrange(project, location) %>% 
+  dplyr::select(project, location, year) %>% 
+  left_join(missing)
+
+write.csv(gis.na, (file.path(root, "Data", "gis", "birds_gis_missing.csv")), row.names = FALSE)
+
+#4. Save----
 write.csv(location, file.path(root, "Data", "gis", "birds_ab_locations.csv"), row.names = FALSE)
 
 #G. SAVE!#############################
