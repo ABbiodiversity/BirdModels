@@ -147,8 +147,6 @@ pc.wt <- rbindlist(pc.list[], fill=TRUE)  %>%
 #7. Save date stamped data & project list----
 save(aru.wt, pc.wt, projects.use, error.log, file=paste0(root, "/Data/WildTrax/wildtrax_raw_", Sys.Date(), ".Rdata"))
 
-save(aru.wt, pc.wt, projects.use, error.log, file=paste0(root, "/Data/WildTrax/wildtrax_raw_", "2023-11-21", ".Rdata"))
-
 #B. GET EBIRD DATA##########################
 
 #1. Set ebd path----
@@ -556,7 +554,16 @@ gis.na <- dplyr::filter(gis.location, gis==0) %>%
 
 write.csv(gis.na, (file.path(root, "Data", "gis", "birds_gis_missing.csv")), row.names = FALSE)
 
-#4. Save----
+#4. Take out the mismatches for now----
+location <- location %>% 
+  anti_join(gis.na %>% 
+              dplyr::select(project, location, year))
+
+use <- use %>% 
+  anti_join(gis.na %>% 
+              dplyr::select(project, location, year))
+
+#5. Save----
 write.csv(location, file.path(root, "Data", "gis", "birds_ab_locations.csv"), row.names = FALSE)
 
 #G. SAVE!#############################
