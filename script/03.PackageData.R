@@ -109,6 +109,9 @@ dd$YR <- dd$YEAR - min(dd$YEAR)
 dd <- data.frame(dd, vs0[rownames(dd),])
 
 #3. Read lookup tables----
+
+#REPLACE THESE WITH ONES FROM THE PACKAGE######
+
 #3a. Vegetation
 tv0 <- read.csv(file.path(root, "Data", "lookups", "lookup-veg-hf-age-v61.csv"))
 rownames(tv0) <- tv0[,1]
