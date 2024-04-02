@@ -24,37 +24,19 @@ root <- "G:/My Drive/ABMI/Projects/BirdModels/"
 
 #3. Load harmonized set----
 load(file.path(root, "Data", "1Harmonized.Rdata"))
-load(file.path(root, "Data", "ab-birds-all-2020-09-23.Rdata"))
+#load(file.path(root, "Data", "ab-birds-all-2020-09-23.Rdata"))
 
 #A. LOAD GIS EXTRACTION####
 
-#1. Load data with gis----
-dbname <- file.path(root, "Data", "summaries_20230118_Birds_Elly_rev00.sqlite")
+#1. Climate data----
+load(file.path(root, "Data", "gis", "bird-point-climate_2024.Rdata"))
 
-#2. Connect to db and list tables----
-mydb <- dbConnect(SQLite(),dbname)
-dbListTables(mydb)
+#2. Point data----
+load(file.path(root, "Data", "gis", "birds-point-sites_1993-2023.Rdata"))
 
-#3. Read in tables----
-#3a. Sites
-#UID has been added
-dsite <- dbGetQuery(mydb, "SELECT * FROM birds_ab_locations_updatedCG_20230127_10TM")
+#3. Buffer data----
+load(file.path(root, "Data", "gis", "birds-point-sites-simplified_1993-2023.Rdata"))
 
-#3b. Sites that are actually outside AB
-#due to raster extraction in script 1
-dout <- dbGetQuery(mydb, "SELECT * FROM sites_within564m_AB_Bndry")
-
-#3b. point level climate data
-dcli <- dbGetQuery(mydb, "SELECT * FROM birds_ab_locations_updatedCG_20230127_10TM_climate_data")
-
-#3c. Point level backfill extraction
-df.pt <- dbGetQuery(mydb, "SELECT * FROM landscape_summary_camaru_pts_1993_2022")
-
-#3d. Polygon backfill extraction
-df <- dbGetQuery(mydb, "SELECT * FROM landscape_summary_camaru_polygon_vegNotNull_1993_2022")
-
-#Disconnect from db
-dbDisconnect(mydb)
 
 #B. WRANGLE GIS DATA####
 
@@ -117,7 +99,7 @@ d_long <- make_veghf_long(d=df.pt,
 
 #1. Load previous dataset----
 e1 <- new.env()
-load(file.path(root, "Data", "ab-birds-all-2020-09-23.RData"), envir = e1)
+load(file.path(root, "Data", "Archive", "ab-birds-all-2020-09-23.RData"), envir = e1)
 #`yy`: occurence data (matrix)
 #`dd`: survey metadata (data frame)
 #`vs0`: veg+soil current+reference at point level (data frame)
@@ -130,12 +112,9 @@ load(file.path(root, "Data", "ab-birds-all-2020-09-23.RData"), envir = e1)
 #`sr1`: soil reference 150m buffer (matrix)
 #`sr2`: soil reference 564m buffer (matrix)
 
-#2. Remove sites outside of AB----
-visit <- visit %>% 
-  dplyr::filter(!gisid %in% dout$gisid)
-
-#3. Create survey primary key----
-visit$visitid <- paste0(visit$gisid, "_", as.character(visit$date))
+#2. Remove sites not in the GIS dataset----
+visit <- location %>% 
+  dplyr::filter(gisid %in% row.names(d.wide.pts$veg.current))
 
 #check for duplicates
 nrow(visit %>% 
@@ -148,19 +127,10 @@ nrow(visit %>%
 spp <- e1$tax$code
 
 #summarize abundance per species per survey
-bird.yy <- bird %>% 
-  mutate(abundance = as.numeric(abundance),
-         visitid = paste0(gisid, "_", as.character(date))) %>% 
-  dplyr::filter(species %in% spp,
-                !is.na(abundance)) %>% 
-  group_by(visitid, species) %>% 
-  summarize(abundance = sum(abundance)) %>% 
-  ungroup() %>% 
-  right_join(visit %>% 
-              dplyr::select(visitid)) %>% 
-  mutate(species = ifelse(is.na(species), "NONE", species),
-         abundance = as.numeric(ifelse(is.na(abundance), 0, abundance))) %>% 
-  arrange(visitid, species)
+use$visitid <- paste0(use$gisid, "_", as.character(use$date_time))
+
+bird.yy <- use %>% 
+  dplyr::select(ALFL:YTVI)
 
 #make wide sparse matrix
 yy <- Xtab(abundance ~ visitid + species, bird.yy)
