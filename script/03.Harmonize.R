@@ -1,28 +1,12 @@
 # ---
-# title: ABMI models - get data
+# title: ABMI models - harmonize data
 # author: Elly Knight
-# created: November 29, 2022
+# created: May 6, 2024
 # ---
 
 #NOTES################################
 
-#The "projectInstructions.csv" file is a list of all projects currently in WildTrax should not be used in ABMI models (instructions=="DO NOT USE"). This file should be updated for each iteration of in collaboration with Erin Bayne. Future versions of this spreadsheet can hopefully be derived by a combination of organization and a google form poll for consent from other organizations.
-
-#The "projectInstructions.csv" file also contains information on which ARU projects are processed for a single species or taxa (instructions=="DO NOT USE") and therefore those visits should only be used for models for the appropriate taxa. This file should be updated for each iteration of the national models in collaboration with Erin Bayne. These projects are currently not included in the models.
-
-#There are a handful of projects that are not downloading properly via wildRtrax. An issue is open on this. These projects are listed in the error.log object. These files should be downloaded manually.
-
 #Riverforks data is stored in the ABMI Oracle database and should be downloaded  using dBeaver. Use the UNRESTRICTED_ACCESS acount to ensure full retrieval of species at risk records. Contact Joan (qfang@ualberta.ca) for access information. This dataset will hopefully be incorporated into WildTrax in the future to avoid this step.
-
-#raw eBird data is downloaded from the eBird interface at https://ebird.org/data/download/ebd prior to wrangling with the "auk" package and will require a request for access. Use the custom download tool to download only the datasets for Canada and the US instead of the global dataset. Note you will also need the global sampling file to use the auk package for zero filling.
-
-#raw eBird data omits Great Grey Owl & Northern Hawk Owl as sensitive species (https://support.ebird.org/en/support/solutions/articles/48000803210?b_id=1928&_gl=1*xq054u*_ga*ODczMTUyMjcuMTY2OTE0MDI4Ng..*_ga_QR4NVXZ8BM*MTY2OTE0MDI4NS4xLjEuMTY2OTE0MDM3OC4zNS4wLjA.&_ga=2.147122167.150058226.1669140286-87315227.1669140286) and should not be used for modelling these two species.
-
-#wrangling eBird data with the auk package requires installation of AWK on windows computers. Please see #https://cornelllabofornithology.github.io/auk/articles/auk.html.
-
-#eBird data has not been zerofilled because there was no species filtering done and we are assuming that all stationary counts have at least 1 bird observed.
-
-#The replace TMTTs script will be replaced by a wildRtrax function in the near future.
 
 #The location csv output of this script (line 582) should be sent to Eric for GIS covariate extraction. The output Eric provides will be used as input in the next script.
 
@@ -34,7 +18,6 @@ library(tidyverse) #basic data wrangling
 library(wildRtrax) #to download data from wildtrax
 library(data.table) #for binding lists into dataframes
 library(lubridate) #date wrangling
-library(auk) #eBird wrangling
 library(downloader) #download zipped provincial boundary shp
 library(sf) #shapefile wrangling
 library(terra) #raster wrangling
@@ -50,120 +33,7 @@ source(config)
 #4. Authenticate----
 wt_auth()
 
-#A. DOWNLOAD DATA FROM WILDTRAX#######################
-
-#1. Get list of projects from WildTrax----
-#sensor = PC gives all ARU and point count projects
-projects <- wt_get_download_summary(sensor_id = 'PC')
-
-#2. Filter out projects that shouldn't be used----
-#nothing in BU training & all "DO NOT USE" projects in projectInventory file
-#filter out 'NONE' method ARU projects later after this field is parsed out
-
-instructions <- read.csv(file.path(root, "Data", "projectInventory", "projectInstructions.csv")) %>%  
-  dplyr::filter(instruction!="ABMI ONLY")
-
-projects.use <- projects %>% 
-  dplyr::filter(organization!="BU-TRAINING",
-                !project_id %in% instructions$project_id)
-
-#3. Loop through projects to download data----
-aru.list <- list()
-pc.list <- list()
-error.log <- data.frame()
-for(i in 1:nrow(projects.use)){
-  
-  #authenticate each time because this loop takes forever
-  wt_auth()
-  
-  #Do each sensor type separately because the reports have different columns and we need different things for each sensor type
-  if(projects.use$sensor[i]=="ARU"){
-    
-    dat.try <- try(wt_download_report(project_id = projects.use$project_id[i], sensor_id = projects.use$sensor[i], weather_cols = F, report = "main"))
-    
-    if(class(dat.try)=="data.frame"){
-      aru.list[[i]] <- dat.try
-    }
-    
-  }
-  
-  if(projects.use$sensor[i]=="PC"){
-    
-    dat.try <- try(wt_download_report(project_id = projects.use$project_id[i], sensor_id = projects.use$sensor[i], weather_cols = F, report="main"))
-    
-    if(class(dat.try)=="data.frame"){
-      pc.list[[i]] <- dat.try
-    }
-    
-  }
-  
-  #Log projects that error
-  if(class(dat.try)!="data.frame"){
-    error.log <- rbind(error.log, 
-                       projects.use[i,])
-    
-  }
-  
-  print(paste0("Finished dataset ", projects.use$project[i], " : ", i, " of ", nrow(projects.use), " projects"))
-  
-}
-
-#4. Go download error projects from wildtrax.ca----
-error.log %>% 
-  inner_join(projects.use %>% 
-              mutate(i = row_number())) %>% 
-  View()
-
-#5. Read in error projects----
-error.files.aru <- list.files(file.path(root, "Data", "WildTrax", "errorFiles", "ARU"), full.names = TRUE)
-
-aru.error <- data.frame()
-for(i in 1:length(error.files.aru)){
-  aru.error <- read.csv(error.files.aru[i]) %>% 
-    rbind(aru.error)
-}
-
-error.files.pc <- list.files(file.path(root, "Data", "WildTrax", "errorFiles", "PC"), full.names = TRUE)
-
-pc.error <- data.frame()
-for(i in 1:length(error.files.pc)){
-  pc.error <- read.csv(error.files.pc[i]) %>% 
-    rbind(pc.error)
-}
-
-#6. Collapse lists----
-#Take out ARU projects with "None" method
-aru.wt <- rbindlist(aru.list[], fill=TRUE)  %>% 
-  rbind(aru.error, fill=TRUE) %>%
-  left_join(projects.use %>% 
-              dplyr::rename(project_status = status)) %>% 
-  dplyr::filter(task_method!="None")
-
-pc.wt <- rbindlist(pc.list[], fill=TRUE)  %>% 
- rbind(pc.error, fill=TRUE) %>%
-  left_join(projects %>% 
-              dplyr::rename(project_status = status))
-
-#7. Save date stamped data & project list----
-save(aru.wt, pc.wt, projects.use, error.log, file=paste0(root, "/Data/WildTrax/wildtrax_raw_", Sys.Date(), ".Rdata"))
-
-#B. GET EBIRD DATA##########################
-
-#1. Set ebd path----
-auk_set_ebd_path(file.path(root, "Data/ebd/ebd_CA-AB_relOct-2022"), overwrite=TRUE)
-
-#2. Define filters----
-filters <- auk_ebd(file="ebd_CA-AB_relOct-2022.txt") %>% 
-  auk_protocol("Stationary") %>% 
-  auk_duration(c(0, 10)) %>% 
-  auk_complete()
-
-#3. Filter data----
-#select columns to keep
-filtered <- auk_filter(filters, file=file.path(root, "Data/ebd_data_filtered.txt"), overwrite=TRUE,
-                       keep = c("group identifier", "sampling_event_identifier", "scientific name", "common_name", "observation_count", "latitude", "longitude", "locality_type", "observation_date", "time_observations_started", "observer_id", "duration_minutes"))
-
-#C. HARMONIZE###############################
+#HARMONIZE###############################
 
 #TO DO: DECIDE ABOUT SEEN/HEARD SONG/CALL####
 
@@ -182,7 +52,7 @@ load(file.path(root, "Data", "WildTrax", "wildtrax_raw_2023-11-21.Rdata"))
 #4. Wrangle WT ARU data----
 #fix a few names to match the GIS
 use.aru <- aru.wt %>% 
-  wt_tidy_species() %>% 
+  wt_tidy_species(remove=c("mammal", "amphibian", "abiotic", "insect", "human", "unknown")) %>% 
   wt_replace_tmtt() %>%
   wt_make_wide() %>% 
   mutate(source="WildTrax",
@@ -198,8 +68,8 @@ use.aru <- aru.wt %>%
 use.pc <- pc.wt %>% 
   dplyr::filter(survey_duration_method!="UNKNOWN",
                 survey_distance_method!="UNKNOWN") %>% 
-  wt_tidy_species()  %>% 
-  wt_make_wide(sensor="PC") %>% 
+  wt_tidy_species(remove=c("mammal", "amphibian", "abiotic", "insect", "human", "unknown")) %>% 
+  wt_make_wide() %>% 
   mutate(source="WildTrax",
          sensor="PC",
          task_method="PC",
@@ -217,7 +87,7 @@ use.pc <- pc.wt %>%
          distance = ifelse(distance1 %in% c("AR", "IN"), Inf, as.numeric(distance1))) %>%
   ungroup() %>% 
   rename(buffer = location_buffer_m)
-  
+
 #6. Wrangle Riverforks data----
 
 #6a. Read it in-----
@@ -252,7 +122,7 @@ use.rf <- raw.rf %>%
          date_time = dmy_hm(paste0(ADATE, " ", TBB_START_TIME))) %>% 
   dplyr::filter(!is.na(date_time)) %>% 
   mutate(date_time = case_when(str_sub(location, 1, 4)=="1525" ~ dmy_hm(paste0(str_sub(ADATE, -100, -3), "07", " ", TBB_START_TIME)),
-         !is.na(date_time) ~ date_time)) %>% 
+                               !is.na(date_time) ~ date_time)) %>% 
   left_join(species %>% 
               dplyr::select(species_code, species_common_name)) %>% 
   dplyr::select(all_of(colnms), species_code, abundance) %>% 
@@ -287,7 +157,7 @@ use.ebd <- raw.ebd %>%
   dplyr::select(all_of(colnms), species_code, abundance) %>% 
   pivot_wider(names_from=species_code, values_from=abundance, values_fn=sum, values_fill=0)
 
-#E. PUT TOGETHER############################
+#PUT TOGETHER############################
 
 #1. Put everything together----
 use <- data.table::rbindlist(list(use.aru, use.pc, use.rf, use.ebd), fill=TRUE) %>% 
@@ -322,7 +192,7 @@ use.ab.r <- use %>%
           dplyr::select(source:distance)) %>% 
   dplyr::filter(PRNAME=="Alberta") %>% 
   dplyr::select(source:distance)
-  
+
 #2c. Apply to bird data and clip again by shp for precision
 use.ab <- use %>% 
   inner_join(unique(use.ab.r), multiple="all") %>% 
@@ -386,7 +256,7 @@ use.duprec <- use.dup %>%
 use.mindur.remove <- use.duprec %>% 
   dplyr::filter(mindur!=maxdur,
                 duration==mindur)
-  
+
 set.seed(1234)
 use.eqdur.remove <- use.duprec %>% 
   dplyr::filter(mindur==maxdur) %>% 
@@ -488,7 +358,7 @@ use <- use.ab %>%
   left_join(fix) %>% 
   mutate(location = ifelse(!is.na(locationfix), locationfix, location))
 
-#F. IDENTIFY LOCATIONS FOR COVARIATE EXTRACTION####
+#IDENTIFY LOCATIONS FOR COVARIATE EXTRACTION####
 
 #1. Identify projects with buffered locations----
 #Any project with buffer of 55000
@@ -541,10 +411,10 @@ gis.location <- location %>%
   left_join(gis %>% 
               rename(location = Site_ID,
                      year = survey_year) %>% 
-               mutate(gis=1,
+              mutate(gis=1,
                      location = case_when(str_sub(location, 1, 5)=="OG-EI" ~ Site,
                                           !is.na(location) ~ location)),
-             multiple="all") %>% 
+            multiple="all") %>% 
   mutate(gis = ifelse(is.na(gis), 0, 1))
 
 gis.na <- dplyr::filter(gis.location, gis==0) %>% 
@@ -566,113 +436,5 @@ use <- use %>%
 #5. Save----
 write.csv(location, file.path(root, "Data", "gis", "birds_ab_locations.csv"), row.names = FALSE)
 
-#G. SAVE!#############################
+#SAVE!#############################
 save(location, use, file=file.path(root, "Data", "1Harmonized.Rdata"))
-  
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-#H. COMPARE############################
-load(file.path(root, "data/ab-birds-all-2020-09-23.Rdata"))
-load(file.path(root, "data/Harmonized.Rdata"))
-
-nrow(dd)
-nrow(visit)
-table(visit$source)
-dd.n <- data.frame(table(dd$PCODE)) %>% 
-  arrange(-Freq)
-visit.n <- data.frame(table(visit$project)) %>% 
-  arrange(-Freq)
-
-missing <- dd %>% 
-  rename(lat = Y, lon = X) %>% 
-  mutate(date = as.character(DATI),
-         latr = round(lat, 4),
-         lonr = round(lon, 4)) %>% 
-  dplyr::select(date, latr, lonr) %>% 
-  anti_join(visit %>% 
-               mutate(date = as.character(date),
-                      latr = round(lat, 4),
-                      lonr= round(lon, 4))) %>% 
-  dplyr::filter(!is.na(latr), 
-                !is.na(date)) %>% 
-  left_join(dd %>% 
-              rename(lat = Y, lon = X) %>% 
-              mutate(date = as.character(DATI),
-                     latr = round(lat, 4),
-                     lonr = round(lon, 4)))
-
-year <- data.frame(table(dd$YEAR)) %>% 
-  rename(year = Var1, dd.n = Freq) %>% 
-  full_join(data.frame(table(visit$year)) %>% 
-              rename(year = Var1, visit.n = Freq)) %>% 
-  mutate(dd.n=ifelse(is.na(dd.n), 0, dd.n),
-         visit.n=ifelse(is.na(visit.n), 0, visit.n)) %>% 
-  dplyr::filter(as.numeric(as.character(year)) >= 1993,
-                as.numeric(as.character(year)) <= 2022)
-
-ggplot(year) +
-  geom_point(aes(x=dd.n, y=visit.n, colour=year)) +
-  geom_abline(aes(intercept=0, slope=1)) +
-  xlab("# visits in previous dataset") +
-  ylab("# visits in current dataset")
-
-ggsave(filename=file.path(root, "Figures", "datasetversionN.jpeg"), width=6, height=4)
-
-proj.dd <- dd %>% 
-  dplyr::filter(YEAR %in% c(2012:2017)) %>% 
-  group_by(PCODE, YEAR) %>% 
-  summarize(n=n()) %>% 
-  ungroup() %>% 
-  pivot_wider(values_from=n, names_from="YEAR", names_prefix="Year", names_sort=TRUE) %>% 
-  arrange(PCODE)
-
-write.csv(proj.dd, "data/PreviousVersionProjects2012-2017.csv", row.names=FALSE)
-
-proj.visit <- visit %>% 
-  dplyr::filter(year %in% c(2012:2017)) %>% 
-  group_by(organization, project, year) %>% 
-  summarize(n=n()) %>% 
-  ungroup() %>% 
-  pivot_wider(values_from=n, names_from="year", names_prefix="Year", names_sort=TRUE) %>% 
-  arrange(organization, project)
-
-write.csv(proj.visit, "data/CurrentVersionProjects2012-2017.csv", row.names=FALSE)
-
-#I. EXTRAS####
-#1. Peak at multiyear data----
-multiyear <- visit %>% 
-  dplyr::select(location, lat, lon, year) %>% 
-  unique() %>% 
-  group_by(location, lat, lon) %>% 
-  summarize(n=n()) %>% 
-  ungroup() %>% 
-  dplyr::filter(n > 1) %>% 
-  left_join(visit %>% 
-              dplyr::select(location, lat, lon, year) %>% 
-              unique())
-
-table(multiyear$n)
-
-ggplot(multiyear) +
-  geom_point(aes(x=lon, y=lat, colour=n)) +
-  scale_colour_viridis_c()
-
-#2. Plot all the visits----
-ggplot(location) +
-  geom_point(aes(x=lon, y=lat, colour=source)) +
-  facet_wrap(~sensor)
-
-ggsave(filename=file.path(root, "Figures", "Locations.jpeg"), width=6, height=4)
