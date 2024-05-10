@@ -13,9 +13,6 @@
 library(tidyverse) #basic data wrangling
 library(mefa4) #Solymos data wrangling
 library(QPAD) #For QPAD offsets
-library(raster) #For QPAD offsets
-library(intrval) #For QPAD offsets
-library(maptools) #For QPAD offsets
 library(opticut) #For lorenz curve in model
 
 #2. Set root path for data on google drive----
