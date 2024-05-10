@@ -428,7 +428,7 @@ SSH_soil <- sc2r[rownames(dd),]
 load_BAM_QPAD(version=3)
 
 #2. Set WD to qpad-offsets package----
-root.qpad <- "C:/Users/Elly Knight/Documents/BAM/Projects/QPAD/qpad-offsets"
+root.qpad <- "C:/Users/elly/Documents/BAM/Projects/QPAD/qpad-offsets"
 
 #3. Read raster data----
 rlcc <- raster(file.path(root.qpad, "data", "lcc.tif"))
