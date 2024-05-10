@@ -437,4 +437,4 @@ use <- use %>%
 write.csv(location, file.path(root, "Data", "gis", "birds_ab_locations.csv"), row.names = FALSE)
 
 #SAVE!#############################
-save(location, use, file=file.path(root, "Data", "1Harmonized.Rdata"))
+save(location, use, file=file.path(root, "Data", "Harmonized.Rdata"))
