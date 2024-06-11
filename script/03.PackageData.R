@@ -14,6 +14,9 @@ library(tidyverse) #basic data wrangling
 library(mefa4) #Solymos data wrangling
 library(QPAD) #For QPAD offsets
 library(opticut) #For lorenz curve in model
+library(maptools) #To calculate sunrise
+library(intrval) #Weird wrangling
+library(raster) #raster handling
 
 #2. Set root path for data on google drive----
 root <- "G:/My Drive/ABMI/Projects/BirdModels/"
@@ -425,7 +428,7 @@ SSH_soil <- sc2r[rownames(dd),]
 load_BAM_QPAD(version=3)
 
 #2. Set WD to qpad-offsets package----
-root.qpad <- "C:/Users/elly/Documents/BAM/Projects/QPAD/qpad-offsets"
+root.qpad <- "C:/Users/elly/Documents/BAM/QPAD/qpad-offsets"
 
 #3. Read raster data----
 rlcc <- raster(file.path(root.qpad, "data", "lcc.tif"))
@@ -530,7 +533,7 @@ setdiff(get_terms(mods_soil, "list"), colnames(dd))
 #relevant terms only
 #use south only
 #fix levels
-cn2 <- c(cn, get_terms(mods_soil, "list"), "soilw")
+cn2 <- c(cn, get_terms(mods_soil, "list"), "soilw", "BLOCK_XYT")
 DAT <- droplevels(dd[dd$useSouth & dd$RND > 10, cn2])
 soilclev <- colnames(COEFS$birds$south$marginal)[!colnames(COEFS$birds$south$marginal) %in% levels(DAT$soilc)]
 levels(DAT$soilc) <- c(levels(DAT$soilc), "TameP", "RoughP", "ThinBreak")
