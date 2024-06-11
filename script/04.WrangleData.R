@@ -26,7 +26,6 @@ options(scipen = 99999)
 
 #4. Load harmonized set----
 load(file.path(root, "Data", "Harmonized.Rdata"))
-#load(file.path(root, "Data", "ab-birds-all-2020-09-23.Rdata"))
 
 #5. Load gis data extractions----
 
