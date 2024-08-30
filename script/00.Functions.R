@@ -601,7 +601,7 @@ get_coef_north <- function(est, subset=1, ...) {
     mu <- drop(Xage %*% estn[colnames(Xage)])
     lam1 <- exp(mu)
     lam1 <- lam1[!grepl("9", names(lam1))]
-    lamCC <- lam1[grepl("CC", names(lam1))]
+    lamCC <- lam1[grepl("CC", names(lam1))] #this never gets used
 
     #    MOD <- c("ROAD", "mWell", "mSoft", "mEnSft", "mTrSft", "mSeism")
     MOD <- c("mWell", "mSoft", "mEnSft", "mTrSft", "mSeism")
