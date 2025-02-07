@@ -6,7 +6,13 @@
 
 #NOTES################################
 
-#This code picks one survey per location per block of region and time interval for each bootstrap
+#PURPOSE: This code picks one survey per location per block of region and time interval for each bootstrap, checks that the list of species to model have sufficient data, and filters counts to the 99.9% quantile to remove outliers
+
+#This code uses several lookups to compile the list of birds that are actually modelled.
+
+#FUTURE VERSION: count outlier removal may make more sense in a previous step.
+#FUTURE VERSION: Bird list lookups are a relic of previous modeling versions and could probably be combined for parsimony.
+#FUTURE VERSION: The list of species modelled could probably be expanded based on exploration of sample sizes and model assumptions.
 
 #PREAMBLE############################
 
@@ -143,11 +149,22 @@ for(i in 1:nrow(loop)){
 #Remove birds for regions with a mean # of detections less than 20
 nmin <- 20
 
-birdlist <- do.call(rbind, count.list) |>
-  group_by(region, species) |>
-  summarize(det.mean = round(mean(detections)),
-            det.min = min(detections)) |>
-  ungroup() |>
+#Get the bird wish list (list of species to run, same as previous years)
+birdlist <- read.csv(file.path(root, "Data", "lookups", "birds-v2024.csv")) |>
+  left_join(read.csv(file.path(root, "Data", "lookups", "birdlist.csv")) |> 
+              rename(common = species,
+                     species = code)) |> 
+  mutate(north = ifelse(show %in% c("c", "n"), TRUE, FALSE),
+         south = ifelse(show %in% c("c", "s"), TRUE, FALSE)) |> 
+  dplyr::select(species, north, south) |> 
+  pivot_longer(north:south, names_to="region", values_to="model") |> 
+  dplyr::filter(model==TRUE) |> 
+  dplyr::select(-model) |> 
+  left_join(do.call(rbind, count.list) |>
+              group_by(region, species) |>
+              summarize(det.mean = round(mean(detections)),
+                        det.min = min(detections)) |>
+              ungroup()) |> 
   dplyr::filter(det.mean >= nmin)
 
 #6. Filter counts to 99.9% quantile----
@@ -167,7 +184,8 @@ for(i in 1:nrow(birdlist)){
 }
 
 #Rename and tidy
-bird <- bird.q
+bird <- bird.q |> 
+  dplyr::select(c("surveyid", all_of(unique(birdlist$species))))
 rm(bird.q)
 
 #PACKAGE######

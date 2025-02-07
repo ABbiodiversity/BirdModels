@@ -6,9 +6,13 @@
 
 #NOTES################################
 
-#Riverforks data is stored in the ABMI Oracle database and should be downloaded  using dBeaver. Use the UNRESTRICTED_ACCESS acount to ensure full retrieval of species at risk records. Contact Joan (qfang@ualberta.ca) for access information. This dataset will hopefully be incorporated into WildTrax in the future to avoid this step.
+#PURPOSE: This script harmonizes data from wildtrax and ebird and formats for subsequent modelling steps.
 
-#The location csv output of this script (line 582) should be sent to Eric for GIS covariate extraction. The output Eric provides will be used as input in the next script.
+#Riverforks data is stored in the ABMI Oracle database and should be downloaded  using dBeaver. Use the UNRESTRICTED_ACCESS acount to ensure full retrieval of species at risk records. Contact Joan (qfang@ualberta.ca) for access information.
+
+#The location csv output of this script should be sent to Eric and/or Brandon for GIS covariate extraction. The output Eric provides will be used as input in the next script.
+
+#FUTURE VERSIONS: Riverforks data will be available in wildtrax and will not require extraction from the ABMI Oracle database.
 
 #PREAMBLE############################
 

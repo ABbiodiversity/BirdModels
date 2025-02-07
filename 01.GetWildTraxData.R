@@ -6,11 +6,15 @@
 
 #NOTES################################
 
+#PURPOSE: This script downloads WildTrax data for modelling. This script should be run once per modelling version and the date-stamped raw object output from this script should be archived for reproducibility.
+
 #The "projectInstructions.csv" file is a list of all projects currently in WildTrax should not be used in ABMI models (instructions=="DO NOT USE"). This file should be updated for each iteration of in collaboration with Erin Bayne. Future versions of this spreadsheet can hopefully be derived by a combination of organization and a google form poll for consent from other organizations.
 
 #The "projectInstructions.csv" file also contains information on which ARU projects are processed for a single species or taxa (instructions=="DO NOT USE") and therefore those visits should only be used for models for the appropriate taxa. This file should be updated for each iteration of the national models in collaboration with Erin Bayne. These projects are currently not included in the models.
 
 #There are a handful of projects that are not downloading properly via wildRtrax. An issue is open on this. These projects are listed in the error.log object. These files should be downloaded manually.
+
+#FUTURE VERSION: Some components of this workflow may require revision to comply with the current version of wildRtrax and associated data cleaning functions.
 
 #PREAMBLE############################
 

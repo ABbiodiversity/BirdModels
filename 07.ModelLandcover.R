@@ -4,6 +4,14 @@
 # created: June 6, 2024
 # ---
 
+#NOTES################################
+
+#PURPOSE: This script runs the second stage of the modelling process, which is the landcover models that are run for the north region and the soil models that are run forh the south region.
+
+#This script uses the same function to run both north and south models, using a lookup table built from list of climate models and the birdlist to determine which model to run. This script will therefore only run for species for which the climate predictions are available as output from the previous step because it requires them for input.
+
+#This script is also written to be run on alliance canada following the steps in `06.ModelClimate.R`
+
 #PREAMBLE############################
 
 #1. Load packages----
@@ -12,11 +20,11 @@ library(tidyverse) #basic data wrangling
 library(parallel) #parallel computing
 
 #2. Determine if testing and on local or cluster----
-test <- FALSE
-cc <- FALSE
+test <- TRUE
+cc <- TRUE
 
 #3. Set nodes for local vs cluster----
-if(cc){ nodes <- 32}
+if(cc){ nodes <- 48}
 if(!cc | test){ nodes <- 4}
 
 #4. Create and register clusters----
@@ -42,10 +50,8 @@ print("* Loading data on master *")
 load(file.path(root, "Data", "Stratified.Rdata"))
 
 #8. Load model script----
-if(cc){source("00.NorthModels.R")
-  source("00.SouthModels.R")}
-if(!cc){source("modelling2.0/00.NorthModels.R")
-  source("modelling2.0/00.SouthModels.R")}
+source("00.NorthModels.R")
+source("00.SouthModels.R")
 
 #9. Load data objects----
 print("* Loading data on workers *")
@@ -130,18 +136,53 @@ model_landcover <- function(i){
   bestmodel <- lc.list[[length(lc.list)]]
   
   #17. Save it----
-  if(region.i=="north"){ save(bestmodel, file = file.path(root, "Results", "LandcoverModels", "Models", "north", paste0("NorthModel_", species.i, "_", boot.i, ".Rdata"))) }
+  if(region.i=="north"){ 
+    
+    #Make a species folder in models
+    if(!(file.exists(file.path(root, "Results", "LandcoverModels", "Models", "north", species.i)))){
+      dir.create(file.path(root, "Results", "LandcoverModels", "Models", "north", species.i))
+    }
+    
+    #Save the model
+    save(bestmodel, file = file.path(root, "Results", "LandcoverModels", "Models", "north", species.i, paste0("NorthModel_", species.i, "_", boot.i, ".Rdata"))) 
+    
+    }
   
-  if(region.i=="south"){ save(bestmodel, file = file.path(root, "Results", "LandcoverModels", "Models", "south", paste0("SouthModel_", species.i, "_", boot.i, ".Rdata"))) }
+  if(region.i=="south"){ 
+    
+    #Make a species folder in models
+    if(!(file.exists(file.path(root, "Results", "LandcoverModels", "Models", "south", species.i)))){
+      dir.create(file.path(root, "Results", "LandcoverModels", "Models", "south", species.i))
+    }
+    
+    #Save the model
+    save(bestmodel, file = file.path(root, "Results", "LandcoverModels", "Models", "south", species.i, paste0("SouthModel_", species.i, "_", boot.i, ".Rdata"))) 
+    
+    }
   
   #18. Save the coefficients----
   coef <- data.frame(name = names(bestmodel$coefficients),
                      value = as.numeric(bestmodel$coefficients)) |>
     mutate(name = ifelse(name=="(Intercept)", "Intercept", name))
   
-  if(region.i=="north"){ write.csv(coef, file = file.path(root, "Results", "LandcoverModels", "Coefficients", "north", paste0("NorthModel_", species.i, "_", boot.i, ".csv")),  row.names = FALSE) }
+  if(region.i=="north"){ 
+    
+    #Make a species folder in models
+    if(!(file.exists(file.path(root, "Results", "LandcoverModels", "Coefficients", "north", species.i)))){
+      dir.create(file.path(root, "Results", "LandcoverModels", "Coefficients", "north", species.i))
+    }
+    
+    #Save the coefficients
+    write.csv(coef, file = file.path(root, "Results", "LandcoverModels", "Coefficients", "north", species.i, paste0("NorthModel_", species.i, "_", boot.i, ".csv")),  row.names = FALSE) }
   
-  if(region.i=="south"){ write.csv(coef, file = file.path(root, "Results", "LandcoverModels", "Coefficients", "south", paste0("SouthModel_", species.i, "_", boot.i, ".csv")), row.names = FALSE) }
+  if(region.i=="south"){ 
+    
+    #Make a species folder in models
+    if(!(file.exists(file.path(root, "Results", "LandcoverModels", "Coefficients", "south", species.i)))){
+      dir.create(file.path(root, "Results", "LandcoverModels", "Coefficients", "south", species.i))
+    }
+    
+    write.csv(coef, file = file.path(root, "Results", "LandcoverModels", "Coefficients", "south", species.i, paste0("SouthModel_", species.i, "_", boot.i, ".csv")), row.names = FALSE) }
   
   #19. Tidy up----
   rm(lc.list, bestmodel, bictable, bestmodeltable)

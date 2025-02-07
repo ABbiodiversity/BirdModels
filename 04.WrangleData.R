@@ -6,6 +6,8 @@
 
 #NOTES################################
 
+#PURPOSE: This script wrangles the gis extraction output into the covariates used in the modelling workflow and calculates qpad offsets.
+
 #PREAMBLE############################
 
 #1. Load packages----
