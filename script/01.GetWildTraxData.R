@@ -131,3 +131,6 @@ pc.wt <- rbindlist(pc.list[], fill=TRUE)  %>%
 
 #2. Save date stamped data & project list----
 save(aru.wt, pc.wt, projects.use, error.log, file=paste0(root, "/Data/WildTrax/wildtrax_raw_", Sys.Date(), ".Rdata"))
+
+#2. Save date stamped data & project list----
+save(aru.wt, pc.wt, projects.use, error.log, file=file.path(root, "Data", "WildTrax", "wildtrax_raw_2023-11-21.Rdata"))

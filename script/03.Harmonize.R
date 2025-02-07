@@ -15,7 +15,7 @@
 #1. Load packages----
 
 library(tidyverse) #basic data wrangling
-library(wildRtrax) #to download data from wildtrax
+library(wildrtrax) #to download data from wildtrax
 library(auk) #to handle eBird data
 library(data.table) #for binding lists into dataframes
 library(lubridate) #date wrangling
@@ -36,19 +36,21 @@ wt_auth()
 
 #HARMONIZE###############################
 
-#TO DO: DECIDE ABOUT SEEN/HEARD SONG/CALL####
-
 #1. Get list of bird species----
 birdcodes <- wt_get_species() |> 
   rename(common = species_common_name) |> 
   dplyr::select(common, species_code) |> 
   mutate(common = case_when(common == "Bald eagle" ~ "Bald Eagle",
                             common == "Northern Pygmy-owl" ~ "Northern Pygmy-Owl",
+                            common == "Black-crowned Night Heron" ~ "Black-crowned Night-Heron",
                             !is.na(common) ~ common))
 
 spp <- read.csv(file.path(root, "Data", "lookups", "birds-v2024.csv")) |>
   dplyr::filter(show != "o") |> 
-  left_join(birdcodes)
+  left_join(birdcodes) |> 
+  mutate(species_code = case_when(common == "House Wren" ~ "HOWR",
+                                  common == "Common Redpoll" ~ "CORE",
+                                  !is.na(species_code) ~ species_code))
 
 #2. Set desired columns----
 colnms <- c("source", "organization", "project_id", "sensor", "task_method", "location", "buffer", "latitude", "longitude", "date_time", "duration", "distance")
@@ -58,7 +60,9 @@ load(file.path(root, "Data", "WildTrax", "wildtrax_raw_2023-11-21.Rdata"))
 
 #4. Wrangle WT ARU data----
 #fix a few names to match the GIS
+#remove detections > 180s for hybrid method and fix duration
 use.aru <- aru.wt |> 
+  dplyr::filter(!(task_method=="1SPM Audio/Visual hybrid" & as.numeric(detection_time) > 180)) |> 
   wt_tidy_species(remove=c("mammal", "amphibian", "abiotic", "insect", "human", "unknown")) |> 
   wt_replace_tmtt() |>
   mutate(species_code = ifelse(species_code=="GRAJ", "CAJA", species_code)) |> 
@@ -67,8 +71,9 @@ use.aru <- aru.wt |>
          sensor="ARU",
          distance=Inf,
          date_time = ymd_hms(recording_date_time),
-         duration = as.numeric(str_sub(task_duration, -100, -2))) |> 
-  mutate(location_buffer_m = ifelse(is.na(location_buffer_m), 0, location_buffer_m)) |> 
+         duration = round(as.numeric(str_sub(task_duration, -100, -2))),
+         duration = ifelse(task_method=="1SPM Audio/Visual hybrid", 180, duration),
+         location_buffer_m = ifelse(is.na(location_buffer_m), 0, location_buffer_m)) |> 
   rename(buffer = location_buffer_m)
 
 #5. Wrangle WT PC data----
@@ -171,7 +176,8 @@ use.ebd <- raw.ebd |>
 #1. Put everything together----
 use <- data.table::rbindlist(list(use.aru, use.pc, use.rf, use.ebd), fill=TRUE) |> 
   dplyr::select(all_of(c(colnms, spp$species_code))) |> 
-  dplyr::filter(!is.na(latitude))
+  dplyr::filter(!is.na(latitude)) |> 
+  mutate(across(c(ALFL:YRWA), replace_na, 0))
 
 #2. Clip by provincial boundaries & filter to AB----
 
