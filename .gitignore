@@ -40,7 +40,7 @@ vignettes/*.pdf
 .Renviron
 
 # wildRtrax login file
-script/login.R
+00.WTlogin.R
 
 # folders to ignore
 data/*
@@ -54,10 +54,3 @@ out/*
 .Rproj.user
 .Rdata
 .DS_Store
-
-# Compute Canada inputs & outputs
-COEFS.RData
-script/04.ComputeCanada/data/
-script/04.ComputeCanada/out/*
-script/04.ComputeCanada/south-*
-script/04.ComputeCanada/north-*
