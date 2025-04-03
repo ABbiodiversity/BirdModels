@@ -20,8 +20,8 @@ library(tidyverse) #basic data wrangling
 library(parallel) #parallel computing
 
 #2. Determine if testing and on local or cluster----
-test <- TRUE
-cc <- TRUE
+test <- FALSE
+cc <- FALSE
 
 #3. Set nodes for local vs cluster----
 if(cc){ nodes <- 48}
@@ -167,7 +167,7 @@ model_landcover <- function(i){
   
   if(region.i=="north"){ 
     
-    #Make a species folder in models
+    #Make a species folder
     if(!(file.exists(file.path(root, "Results", "LandcoverModels", "Coefficients", "north", species.i)))){
       dir.create(file.path(root, "Results", "LandcoverModels", "Coefficients", "north", species.i))
     }
@@ -192,24 +192,25 @@ model_landcover <- function(i){
 #RUN MODELS###############
 
 #1. Get list of climate models----
-climate <- data.frame(path = list.files(file.path(root, "Results", "ClimateModels", "Predictions"),  full.names = TRUE, pattern="*.csv"),
-                      file = list.files(file.path(root, "Results", "ClimateModels", "Predictions"), pattern="*.csv")) |>
-  separate(file, into=c("model", "species", "bootstrap", "filetype")) |>
-  dplyr::select(-model, -filetype)
+climate <- data.frame(path = list.files(file.path(root, "Results", "ClimateModels", "Predictions"),  full.names = TRUE, pattern="*.csv", recursive=TRUE),
+                      file = list.files(file.path(root, "Results", "ClimateModels", "Predictions"), pattern="*.csv", recursive=TRUE)) |>
+  separate(file, into=c("spf", "model", "species", "bootstrap", "filetype")) |>
+  dplyr::select(-model, -filetype, -spf)
 
-#3. Make list----
+#2. Make list----
 todo <- birdlist |>
   dplyr::select(species, region) |>
   inner_join(climate, multiple="all")
 
-#4. Check against models already run----
+#3. Check against models already run----
 done <- data.frame(file = list.files(file.path(root, "Results", "LandCoverModels", "Models"), pattern="*.Rdata", recursive = TRUE)) |>
-  separate(file, into=c("region", "f1", "species", "bootstrap", "f2")) |>
+  separate(file, into=c("region", "f1", "f2", "species", "bootstrap", "f3")) |> 
   dplyr::select(region, species, bootstrap) |>
   inner_join(data.frame(file = list.files(file.path(root, "Results", "LandCoverModels", "Coefficients"), pattern="*.csv", recursive = TRUE)) |>
-               separate(file, into=c("region", "f3", "species", "bootstrap", "f4")) |>
+               separate(file, into=c("region", "f4", "f5", "species", "bootstrap", "f6")) |>
                dplyr::select(region, species, bootstrap))
 
+#4. Make to do list----
 loop <- anti_join(todo, done)
 
 if(nrow(loop) > 0){
@@ -217,14 +218,18 @@ if(nrow(loop) > 0){
   #For testing
   if(test) {loop <- loop[1:nodes,]}
   
+  start <- Sys.time()
+  
   print("* Loading model loop on workers *")
   tmpcl <- clusterExport(cl, c("loop"))
   
-  #10. Run BRT function in parallel----
+  #5. Run model function in parallel----
   print("* Fitting models *")
   mods <- parLapply(cl,
                     X=1:nrow(loop),
                     fun=model_landcover)
+  
+  end <- Sys.time()
   
 }
 
