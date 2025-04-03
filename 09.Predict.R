@@ -35,7 +35,7 @@ load(file.path(root, "Data", "gis", "kgrid_2.2.Rdata"))
 load(file.path(root, "Data", "gis", "backfillV7_w2w_2021HFI.Rdata"))
 
 #7. Load BA's functions----
-source("BAscripts/data-cleaning_functions.R")
+source("00.Functions.R")
 
 #8. Load lookups----
 veg.lookup <- read.csv(file.path(root, "Data", "lookups", "lookup-veg-hf-age-v2020.csv"))
