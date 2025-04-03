@@ -29,10 +29,10 @@ library(terra) #raster wrangling
 
 #2. Set root path for data on google drive----
 
-root <- "G:/My Drive/ABMI/Projects/BirdModels"
+root <- "G:/Shared drives/ABMI_ECKnight/Projects/BirdModels"
 
 #3. Login to WildTrax----
-config <- "script/00.WTlogin.R"
+config <- "00.WTlogin.R"
 source(config)
 
 #4. Authenticate----
@@ -74,7 +74,7 @@ use.aru <- aru.wt |>
   mutate(source="WildTrax",
          sensor="ARU",
          distance=Inf,
-         date_time = ymd_hms(recording_date_time),
+         date_time = ymd_hms(recording_date_time, tz="America/Edmonton"),
          duration = round(as.numeric(str_sub(task_duration, -100, -2))),
          duration = ifelse(task_method=="1SPM Audio/Visual hybrid", 180, duration),
          location_buffer_m = ifelse(is.na(location_buffer_m), 0, location_buffer_m)) |> 
@@ -91,7 +91,7 @@ use.pc <- pc.wt |>
   mutate(source="WildTrax",
          sensor="PC",
          task_method="PC",
-         date_time = ymd_hms(survey_date)) |> 
+         date_time = ymd_hms(survey_date, tz="America/Edmonton")) |> 
   rowwise() |>
   mutate(durationMethod = ifelse(str_sub(survey_duration_method, -1, -1)=="+",
                                  str_sub(survey_duration_method, -100, -2),
@@ -137,7 +137,7 @@ use.rf <- raw.rf |>
          duration = 3*60,
          distance = Inf,
          abundance = 1,
-         date_time = dmy_hm(paste0(ADATE, " ", TBB_START_TIME))) |> 
+         date_time = dmy_hm(paste0(ADATE, " ", TBB_START_TIME), tz="America/Edmonton")) |> 
   dplyr::filter(!is.na(date_time)) |> 
   mutate(date_time = case_when(str_sub(location, 1, 4)=="1525" ~ dmy_hm(paste0(str_sub(ADATE, -100, -3), "07", " ", TBB_START_TIME)),
                                !is.na(date_time) ~ date_time)) |> 
@@ -163,7 +163,7 @@ use.ebd <- raw.ebd |>
          sensor="PC",
          task_method="PC",
          buffer=0,
-         date_time = ymd_hms(paste0(observation_date, time_observations_started)),
+         date_time = ymd_hms(paste0(observation_date, time_observations_started), tz="America/Edmonton"),
          distance = Inf,
          abundance = as.numeric(ifelse(observation_count=="X", 1, observation_count)),
          duration = duration_minutes*60) |> 
