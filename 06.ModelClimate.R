@@ -43,8 +43,8 @@ library(MuMIn) #Model averaging
 library(parallel) #parallel computing
 
 #2. Determine if testing and on local or cluster----
-test <- TRUE
-cc <- TRUE
+test <- FALSE
+cc <- FALSE
 
 #3. Set nodes for local vs cluster----
 if(cc){ nodes <- 48}
@@ -135,21 +135,6 @@ model_climate <- function(i){
     #9. Get coefficients----
     averagecoefficients <- data.frame(coef = averagemodel$coefficients["full",])
     
-    #10. Save some things----
-    
-    #Make the model object smaller
-    averagemodel$call <- NULL
-    averagemodel$coefArray <- NULL
-    averagemodel$residuals <- NULL
-    
-    #Make a species folder in models
-    if(!(file.exists(file.path(root, "Results", "ClimateModels", "Models", species.i)))){
-      dir.create(file.path(root, "Results", "ClimateModels", "Models", species.i))
-    }
-    
-    #Save the light model
-    save(averagemodel, file = file.path(root, "Results", "ClimateModels", "Models", species.i, paste0("ClimateModel_", species.i, "_", boot.i, ".Rdata")))
-    
     #Make a species folder in predictions
     if(!(file.exists(file.path(root, "Results", "ClimateModels", "Predictions", species.i)))){
       dir.create(file.path(root, "Results", "ClimateModels", "Predictions", species.i))
@@ -197,12 +182,12 @@ todo <- expand.grid(species = spp, bootstrap = b) |>
   arrange(species)
 
 #4. Check against models already run----
-done <- data.frame(file = list.files(file.path(root, "Results", "ClimateModels", "Predictions"), pattern="*.csv")) |>
-  separate(file, into=c("f1", "species", "bootstrap", "f2")) |>
+done <- data.frame(file = list.files(file.path(root, "Results", "ClimateModels", "Predictions"), pattern="*.csv", recursive = TRUE)) |>
+  separate(file, into=c("f1", "f2", "species", "bootstrap", "f3")) |> 
   dplyr::select(species, bootstrap) |>
   mutate(bootstrap = as.numeric(bootstrap)) |>
-  inner_join(data.frame(file = list.files(file.path(root, "Results", "ClimateModels", "Coefficients"), pattern="*.csv")) |>
-               separate(file, into=c("f3", "species", "bootstrap", "f4")) |>
+  inner_join(data.frame(file = list.files(file.path(root, "Results", "ClimateModels", "Coefficients"), pattern="*.csv", recursive=TRUE)) |>
+               separate(file, into=c("f4", "f5", "species", "bootstrap", "f6")) |>
                dplyr::select(species, bootstrap) |>
                mutate(bootstrap = as.numeric(bootstrap)))
 
@@ -224,7 +209,7 @@ if(nrow(loop) > 0){
   print("* Loading model loop on workers *")
   tmpcl <- clusterExport(cl, c("loop"))
   
-  #7. Run BRT function in parallel----
+  #7. Run model function in parallel----
   print("* Fitting models *")
   mods <- parLapply(cl,
                     X=1:nrow(loop),

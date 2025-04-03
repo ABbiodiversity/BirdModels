@@ -8,9 +8,6 @@
 
 #The translation of the model coefficients to the coefficients that are standardized across taxa relies on a lookup table. The proportions of the age coefficients in the raw models that contribute to the age stages in the standardized coefficients are area under the curve.
 
-#TO DO: CONSIDER TRUNCATING CLIMATE COEFF IN JOINT MODELS########
-#TO DO: FILTERU AUC LOOP BY BIRDLIST######
-
 #PREAMBLE############################
 
 #1. Load packages----
@@ -28,13 +25,13 @@ options(scipen = 99999)
 #4. Get the list of models run----
 mods <- data.frame(path = list.files(file.path(root, "Results", "LandcoverModels", "Coefficients"), full.names = TRUE, recursive = TRUE, pattern="*.csv"),
                    file = list.files(file.path(root, "Results", "LandcoverModels", "Coefficients"), recursive = TRUE, pattern="*.csv")) |>
-  separate(file, into=c("region", "f1", "species", "bootstrap")) |>
+  separate(file, into=c("region", "f1", "f2", "species", "bootstrap")) |>
   mutate(bootstrap = as.numeric(bootstrap)) |>
-  dplyr::select(-f1)
+  dplyr::select(-f1, -f2)
 
 #5. Load model scripts----
-source("modelling2.0/00.NorthModels.R")
-source("modelling2.0/00.SouthModels.R")
+source("00.NorthModels.R")
+source("00.SouthModels.R")
 
 #6. Load data----
 load(file.path(root, "Data", "Stratified.Rdata"))
@@ -76,15 +73,14 @@ colnames(age) <- fix_names(colnames(age))
 #CLIMATE MODEL COEFFICIENTS##########
 
 #1. Get list of climate models----
-climate <- data.frame(path = list.files(file.path(root, "Results",  "ClimateModels", "Coefficients"),  full.names = TRUE, pattern="*.csv"),
-                      file = list.files(file.path(root, "Results",  "ClimateModels", "Coefficients"), pattern="*.csv")) |>
-  separate(file, into=c("model", "species", "bootstrap", "filetype")) |>
-  dplyr::select(-model, -filetype) |>
+climate <- data.frame(path = list.files(file.path(root, "Results",  "ClimateModels", "Coefficients"),  full.names = TRUE, pattern="*.csv", recursive = TRUE),
+                      file = list.files(file.path(root, "Results",  "ClimateModels", "Coefficients"), pattern="*.csv", recursive = TRUE)) |>
+  separate(file, into=c("f1", "model", "species", "bootstrap", "filetype")) |>
+  dplyr::select(-model, -filetype, -f1) |>
   mutate(bootstrap = as.numeric(bootstrap)) |>
   inner_join(mods |>
                dplyr::select(species, bootstrap) |>
-               unique()) |>
-  dplyr::filter(bootstrap %in% c(1:3))
+               unique())
 
 #2. Get list of species----
 spp <- unique(climate$species)
@@ -132,8 +128,7 @@ for(i in 1:length(spp)){
 
 #1. Get the list of north models----
 north <- mods |>
-  dplyr::filter(region=="north",
-                bootstrap %in% c(1:3))
+  dplyr::filter(region=="north")
 
 #2. Get list of species----
 spp <- unique(north$species)
@@ -297,13 +292,11 @@ for(i in 1:length(spp)){
 #17. Truncate NESP climate coef because it blows up the relative abundance prediction----
 joint.n["NESP","Climate",] <- joint.n["NESP","Climate",]*0.3
 
-
 #LANDCOVER MODEL COEFFICIENTS - SOUTH#############
 
 #1. Get the list of north models----
 south <- mods |>
-  dplyr::filter(region=="south",
-                bootstrap %in% c(1:3))
+  dplyr::filter(region=="south")
 
 #2. Get list of species----
 spp <- unique(south$species)
@@ -512,7 +505,8 @@ for(i in 1:nrow(todo)){
   
   boots <- rbind(boots,
                  min.i |>
-                   mutate(species = spp.i))
+                   mutate(species = spp.i,
+                          region = region.i))
   
   cat("Finished nmds", i, "of", nrow(todo), "\n")
   
@@ -538,31 +532,38 @@ simple_auc <- function(ROC) {
 
 #2. Get list of median models----
 loop <- data.frame(path = list.files(file.path(root, "Results", "LandcoverModels", "Models"),  full.names = TRUE, pattern="*.Rdata", recursive = TRUE),
-                   file = list.files(file.path(root, "Results", "LandcoverModels", "Models"), pattern="*.Rdata", recursive = TRUE))  |>
-  separate(file, into=c("region1", "region2", "species", "bootstrap", "filetype")) |>
-  mutate(region = str_sub(region2, -100, -6),
-         bootstrap = as.numeric(bootstrap)) |>
-  dplyr::select(-filetype, -region1, -region2) |>
-  inner_join(boots)
+                   file = list.files(file.path(root, "Results", "LandcoverModels", "Models"), pattern="*.Rdata", recursive = TRUE)) |> 
+  separate(file, into=c("region", "sp1", "region2", "species", "bootstrap", "filetype")) |>
+  mutate(bootstrap = as.numeric(bootstrap)) |> 
+  dplyr::select(-filetype, -region2, -sp1) |>
+  inner_join(rbind(boots |> 
+                dplyr::filter(region %in% c("north", "south")),
+              boots |> 
+                dplyr::filter(region=="both") |> 
+                mutate(region="north"),
+              boots |> 
+                dplyr::filter(region=="both") |> 
+                mutate(region="south")),
+             by=c("species", "region", "bootstrap"))
 
-#2. Set up loop----
+#3. Set up loop----
 loop$AUC_binary <- NA
 loop$AUC_poisson <- NA
 for(i in 1:nrow(loop)){
   
-  #3. Load the model----
+  #4. Load the model----
   load.i <-try(load(loop$path[i]))
   if(inherits(load.i, "try-error")){ next }
   
-  #4. Make predictions on training data----
+  #5. Make predictions on training data----
   pred.i <- predict(bestmodel, type="response")
   
-  #5. AUC for binary reponse----
+  #6. AUC for binary response----
   bestmodel$binary <- ifelse(bestmodel$y > 1, 1, bestmodel$y)
   roc.i <- try(roc(response=bestmodel$binary, predictor=pred.i, quiet=TRUE))
-  if(inherits(roc.i, "try-error")){loop$AUC_binary[i] <- NA} else {    loop$AUC_binary[i] <- auc(roc.i)}
+  if(inherits(roc.i, "try-error")){loop$AUC_binary[i] <- NA} else {loop$AUC_binary[i] <- auc(roc.i)}
   
-  #6. AUC for count response----
+  #7. AUC for count response----
   roc.p <- simple_roc(labels=bestmodel$y, scores=pred.i)
   loop$AUC_poisson[i] <- simple_auc(roc.p)
   
@@ -571,6 +572,7 @@ for(i in 1:nrow(loop)){
   
 }
 
+#8. Tidy----
 auc.out <- loop
 rm(loop)
 
@@ -620,10 +622,9 @@ occurrence <- bird |>
 auc <- auc.out |>
   rename(code = species) |>
   group_by(code, region) |>
-  summarize(AUC = mean(AUC_poisson),
-            AUCsd = sd(AUC_poisson)) |>
+  summarize(AUC = mean(AUC_poisson)) |>
   ungroup() |>
-  pivot_wider(names_from="region", values_from=c("AUC", "AUCsd"))
+  pivot_wider(names_from="region", values_from=c("AUC"))
 
 #Wrangle the median bootstrap
 bootuse <- boots |>
@@ -646,9 +647,9 @@ birdtable <- birdnames |>
   rename(SpeciesID = sppid,
          ScientificName = scinam,
          CommonName = species,
-         Comments = code) |>
-  rename(AUCNorth = AUC_North, AUCSouth = AUC_South, AUCsdNorth = AUCsd_North, AUCsdSouth = AUCsd_South, Bootstrap = bootstrap) |>
-  dplyr::select(SpeciesID, ScientificName, CommonName, ModelNorth, ModelSouth, Occurrences, Nonnative, LinkHabitat, LinkSpclim, AUCNorth, AUCsdNorth, AUCSouth, AUCsdSouth, Bootstrap, Comments, Group)
+         Comments = code) |> 
+  rename(AUCNorth = north, AUCSouth = south, Bootstrap = bootstrap) |>
+  dplyr::select(SpeciesID, ScientificName, CommonName, ModelNorth, ModelSouth, Occurrences, Nonnative, LinkHabitat, LinkSpclim, AUCNorth, AUCSouth, Bootstrap, Comments, Group)
 
 #3. Put together----
 birds <- list(
