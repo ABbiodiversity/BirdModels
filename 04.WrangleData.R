@@ -19,7 +19,7 @@ library(sf) #coordinate reprojection
 library(QPAD) #for offsets
 
 #2. Set root path for data on google drive----
-root <- "G:/My Drive/ABMI/Projects/BirdModels"
+root <- "G:/Shared drives/ABMI_ECKnight/Projects/BirdModels"
 
 #3. Restrict scientific notation----
 options(scipen = 99999)
@@ -72,6 +72,7 @@ ids <- location |>
                 gisid %in% backfill.id$gisid)
 
 #2. Filter survey object----
+#standardize time zone 
 #remove surveys with "NONE" transcription method
 #remove missing lat/lons
 #remove missing climate variables
@@ -83,7 +84,6 @@ ids <- location |>
 
 complete <- use |>
   dplyr::select(-locationfix, -missingcomments) |> #TAKE THIS OUT ONCE NAMES FIXED
-  mutate(date_time = ymd_hms(date_time)) |>
   dplyr::filter(gisid %in% ids$gisid,
                 task_method!="None",
                 !is.na(latitude),
@@ -126,34 +126,22 @@ bird <- complete |>
 spp <- sort(c(intersect(getBAMspecieslist(), colnames(bird)), "GRAJ"))
 
 #3. WildTRax login----
-source("login.R")
+source("00.WTlogin.R")
 wt_auth()
 
 #4. Wrangle data----
-#split into ebird, which is UTC, and others, which are local time
-complete.local <- complete |>
-  dplyr::filter(source!="eBird") |>
-  dplyr::select(surveyid, organization, project_id, location, longitude, latitude, date_time, duration, distance, task_method) |>
-  rename(recording_date_time = date_time,
-         task_duration = duration,
-         task_distance = distance)
-
-complete.utc <- complete |>
-  dplyr::filter(source=="eBird") |>
+complete.x <- complete |> 
   dplyr::select(surveyid, organization, project_id, location, longitude, latitude, date_time, duration, distance, task_method) |>
   rename(recording_date_time = date_time,
          task_duration = duration,
          task_distance = distance)
 
 #5. Make offsets----
-off.local <- wt_qpad_offsets(complete.local, species=spp, version=3, together=FALSE)
-off.utc <- wt_qpad_offsets(complete.utc, species=spp, version=3, together=FALSE)
+off <- wt_qpad_offsets(complete.x, species=spp, version=3, together=FALSE)
 
 #6. Put together----
-offset.calc <- data.frame(surveyid = complete.local$surveyid) |>
-  cbind(data.frame(off.local)) |>
-  rbind(data.frame(surveyid = complete.utc$surveyid) |>
-          cbind(data.frame(off.utc))) |>
+offset.calc <- data.frame(surveyid = complete.x$surveyid) |>
+  cbind(data.frame(off)) |>
   arrange(surveyid) |>
   rename(CAJA = GRAJ)
 
