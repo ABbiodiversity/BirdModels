@@ -87,3 +87,23 @@ ggplot(out |> dplyr::filter(!species %in% remove)) +
 ggplot(out |> pivot_longer(pop.old:pop.new, names_to="version", values_to="males") |>
          dplyr::filter(!species %in% remove)) +
   geom_boxplot(aes(x=version, y=log(males)))
+
+#SPATIAL CORRELATION###########
+
+#1. Put together with AUC----
+out_auc <- auc |> 
+  rename(species = Comments) |> 
+  inner_join(out) |> 
+  mutate(auc_diff = new - old)
+
+#2. Old vs new vs AUC ----
+ggplot(out_auc) + 
+  geom_text(aes(x=cor_oldnew, y=auc_diff, label=species))
+
+#3. EBird correlation ----
+ggplot(out_auc) +
+  geom_text(aes(x=cor_oldebd, y=cor_newebd, label=species)) +
+  geom_abline(aes(intercept=0, slope=1), linetype="dashed")
+
+ggplot(out_auc |> pivot_longer(cor_oldebd:cor_newebd, names_to="version", values_to="corr")) +
+  geom_boxplot(aes(x=version, y=corr))
