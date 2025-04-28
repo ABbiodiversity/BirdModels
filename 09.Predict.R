@@ -6,7 +6,7 @@
 
 #NOTES################################
 
-#Adapted from Brandon Allen's prediction script for the output of the `09.PackageCoefficients.R` script
+#Adapted from Brandon Allen's prediction script.
 
 #PREAMBLE############################
 
@@ -161,6 +161,7 @@ for(i in 1:nrow(spp)){
     
     #Get the coefficients
     vegclim.i <- northjoint[spp$SpeciesID[i],,spp$Bootstrap[i]]
+    vegclim.i["Climate"] <- vegclim.i["Climate"]*0.5
     veg.i <- vegclim.i[names(vegclim.i)!="Climate"]
     
     #Get the kgrid veg data, but take out climate
@@ -220,6 +221,7 @@ for(i in 1:nrow(spp)){
   }
   
   #6. Combine & store----
+  q <- spp$PlotQuantile[i]
   predictions[[i]] <- try(data.frame(Climate = pred.climate,
                                      Veg = veg.cur$Veg,
                                      Soil = soil.cur$Soil,
@@ -234,7 +236,7 @@ for(i in 1:nrow(spp)){
                                    species = spp$Comments[i],
                                    speciesname = spp$SpeciesID[i],
                                    Bootstrap = spp$Bootstrap[i]) |>
-                            mutate(Provincial = ifelse(Provincial > quantile(Provincial, 0.999), quantile(Provincial, 0.999), Provincial)))
+                            mutate(Provincial = ifelse(Provincial > quantile(Provincial, q), quantile(Provincial, q), Provincial)))
   
   cat("Finished", spp$Comments[i], "predictions :", i, "of", nrow(spp), "\n")
   
