@@ -34,8 +34,11 @@ load(file.path(root, "Results", "Archive", "2023", "Birds2023.RData"), envir=old
 #6. Load the data----
 load(file.path(root, "Data", "Stratified.Rdata"))
 
-#7. Load the bird kgrid----
-load(file.path(root, "Data", "gis", "kgrid_2.2_birds.Rdata"))
+#7. Load the kgrids----
+load(file.path(root, "Data", "gis", "kgrid_2.2.Rdata"))
+
+#4. Get the new predictions & kgrid----
+load(file.path(root, "Results", "Predictions2024.RData"))
 
 #KGRID PREDICTIONS#######
 
@@ -74,11 +77,7 @@ spp <- inner_join(new$birds$species |>
 #                             pattern = "abundance_seasonal_mean_3km")
 # }
 
-#4. Get the new predictions & kgrid----
-load(file.path(root, "Results", "Predictions2024.RData"))
-load(file.path(root, "Data", "gis", "kgrid_2.2.Rdata"))
-
-#5. Get an alberta border for cropping----
+#4. Get an alberta border for cropping----
 ab <- read_sf(file.path(root, "Data", "gis", "lpr_000b21a_e.shp")) |>
   dplyr::filter(PRNAME=="Alberta") |>
   st_transform(crs(load_raster(spp$species_code[1], product="abundance", period="seasonal", resolution="3km"))) |>
@@ -221,7 +220,7 @@ for(i in 1:nrow(spp)){
   if(class(pred.old)!="try-error"){
     ggsave(grid.arrange(clim.plot, new.plot, old.plot, ebd.plot, pts.plot,
                         ncol=5, nrow=1, top=spp$species[i]),
-           filename = file.path(root, "Results", "Plots", "Comparisons", paste0(spp$species[i], ".jpeg")),
+           filename = file.path(root, "Results", "Plots", "Comparisons", paste0(spp$species[i], "jpeg")),
            width = 14, height = 6)
   } else {
     ggsave(grid.arrange(clim.plot, new.plot, pts.plot,
