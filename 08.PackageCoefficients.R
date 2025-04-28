@@ -96,7 +96,8 @@ coefrename <- c("Intercept", "MAP", "FFP", "TD", "CMD", "EMT", "Easting", "North
 for(i in 1:length(spp)){
   
   #6. List of models for that species----
-  climate.i <- dplyr::filter(climate, species==spp[i])
+  climate.i <- dplyr::filter(climate, species==spp[i],
+                             bootstrap %in% c(1:bmax))
   
   #7. Read them in----
   #sort and fix names
@@ -121,8 +122,6 @@ for(i in 1:length(spp)){
   cat("Finished species", i, "of", length(spp), "\n")
   
 }
-
-
 
 #LANDCOVER MODEL COEFFICIENTS - NORTH#############
 
@@ -631,6 +630,13 @@ bootuse <- boots |>
   dplyr::select(species, bootstrap) |>
   rename(code = species)
 
+#set species to remove
+spp.remove <- c("VEER", "LEYE")
+
+#set different plot truncation quantile species
+q990 <- c("NOFL")
+q999 <- c("BLBW", "MOCH", "WCSP", "CAWA")
+
 #Make the table
 birdtable <- birdnames |>
   dplyr::filter(sppid %in% dimnames(joint.n)[[1]] | sppid %in% dimnames(joint.s)[[1]]) |>
@@ -643,13 +649,17 @@ birdtable <- birdnames |>
          LinkHabitat = "log",
          LinkSpclim = "log",
          Group = "birds",
-         Nonnative = FALSE) |>
+         Nonnative = FALSE,
+         Use = ifelse(code %in% spp.remove, FALSE, TRUE),
+         PlotQuantile = case_when(code %in% q990 ~ 0.990,
+                                  code %in% q999 ~ 0.999,
+                                  !is.na(code) & Use==TRUE ~ 0.995)) |>
   rename(SpeciesID = sppid,
          ScientificName = scinam,
          CommonName = species,
          Comments = code) |> 
   rename(AUCNorth = north, AUCSouth = south, Bootstrap = bootstrap) |>
-  dplyr::select(SpeciesID, ScientificName, CommonName, ModelNorth, ModelSouth, Occurrences, Nonnative, LinkHabitat, LinkSpclim, AUCNorth, AUCSouth, Bootstrap, Comments, Group)
+  dplyr::select(SpeciesID, ScientificName, CommonName, ModelNorth, ModelSouth, Occurrences, Nonnative, LinkHabitat, LinkSpclim, AUCNorth, AUCSouth, Bootstrap, Comments, Group, Use, PlotQuantile)
 
 #3. Put together----
 birds <- list(
