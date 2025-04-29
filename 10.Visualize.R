@@ -221,12 +221,12 @@ for(i in 1:nrow(spp)){
     ggsave(grid.arrange(clim.plot, new.plot, old.plot, ebd.plot, pts.plot,
                         ncol=5, nrow=1, top=spp$species[i]),
            filename = file.path(root, "Results", "Plots", "Comparisons", paste0(spp$species[i], "jpeg")),
-           width = 14, height = 6)
+           width = 14, height = 6, device="jpeg")
   } else {
     ggsave(grid.arrange(clim.plot, new.plot, pts.plot,
                         ncol=3, nrow=1, top=spp$species[i]),
            filename = file.path(root, "Results", "Plots", "Comparisons", paste0(spp$species[i], ".jpeg")),
-           width = 9, height = 6)
+           width = 9, height = 6, device="jpeg")
   }
 
   cat("Finished", spp$species[i], "predictions :", i, "of", nrow(spp), "\n")
