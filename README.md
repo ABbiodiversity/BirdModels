@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Alberta Biodiversity Monitoring Institute (ABMI) has developed a set of models for landbird species in Alberta. This repository contains code to source raw data, wrangle those data, fit models, evaluate the models, and package them for use. Future versions of this repository will also contain a **bookdown** document describing how data was collected, processed, and analysed. Readers can find the most up-to-date results on the ABMI Biodiversity Browser (https://www.abmi.ca/home/data-analytics/biobrowser-home).
+The Alberta Biodiversity Monitoring Institute (ABMI) has developed a set of models for landbird species in Alberta. This repository contains code to source raw data, wrangle those data, fit models, evaluate the models, and package them for use. Future versions of this repository will also contain a **bookdown** document describing how data was collected, processed, and analysed. Readers can find the most up-to-date results on the [ABMI Biodiversity Browser](https://www.abmi.ca/home/data-analytics/biobrowser-home).
 
 ## Acknowledgements
 
