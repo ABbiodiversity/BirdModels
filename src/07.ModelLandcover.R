@@ -50,8 +50,10 @@ print("* Loading data on master *")
 load(file.path(root, "Data", "Stratified.Rdata"))
 
 #8. Load model script----
-source("00.NorthModels.R")
-source("00.SouthModels.R")
+if(cc){source("00.NorthModels.R")
+  source("00.SouthModels.R")}
+if(!cc){source("src/00.NorthModels.R")
+  source("src/00.SouthModels.R")}
 
 #9. Load data objects----
 print("* Loading data on workers *")

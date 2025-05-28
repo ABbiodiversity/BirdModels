@@ -73,7 +73,8 @@ print("* Loading data on master *")
 load(file.path(root, "Data", "Stratified.Rdata"))
 
 #8. Load model script----
-source("00.ClimateModels.R")
+if(cc){source("00.ClimateModels.R")}
+if(!cc){source("src/00.ClimateModels.R")}
 
 #9. Number of climate models----
 n <- length(modelsclimate)

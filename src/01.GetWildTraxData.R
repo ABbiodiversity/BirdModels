@@ -29,7 +29,7 @@ library(data.table) #for binding lists into dataframes
 root <- "G:/My Drive/ABMI/Projects/BirdModels"
 
 #3. Login to WildTrax----
-config <- "script/00.WTlogin.R"
+config <- "src/00.WTlogin.R"
 source(config)
 
 #4. Authenticate----
