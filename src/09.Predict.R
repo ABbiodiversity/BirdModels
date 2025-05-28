@@ -35,7 +35,7 @@ load(file.path(root, "Data", "gis", "kgrid_2.2.Rdata"))
 load(file.path(root, "Data", "gis", "backfillV7_w2w_2021HFI.Rdata"))
 
 #7. Load BA's functions----
-source("00.Functions.R")
+source("src/00.Functions.R")
 
 #8. Load lookups----
 veg.lookup <- read.csv(file.path(root, "Data", "lookups", "lookup-veg-hf-age-v2020.csv"))
@@ -161,7 +161,6 @@ for(i in 1:nrow(spp)){
     
     #Get the coefficients
     vegclim.i <- northjoint[spp$SpeciesID[i],,spp$Bootstrap[i]]
-    vegclim.i["Climate"] <- vegclim.i["Climate"]*0.5
     veg.i <- vegclim.i[names(vegclim.i)!="Climate"]
     
     #Get the kgrid veg data, but take out climate
