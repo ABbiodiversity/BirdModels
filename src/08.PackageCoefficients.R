@@ -30,8 +30,8 @@ mods <- data.frame(path = list.files(file.path(root, "Results", "LandcoverModels
   dplyr::select(-f1, -f2)
 
 #5. Load model scripts----
-source("00.NorthModels.R")
-source("00.SouthModels.R")
+source("src/00.NorthModels.R")
+source("src/00.SouthModels.R")
 
 #6. Load data----
 load(file.path(root, "Data", "Stratified.Rdata"))
@@ -89,8 +89,8 @@ spp <- unique(climate$species)
 bmax <- max(climate$bootstrap)
 
 #4. Set the column names----
-coefnames <- c("(Intercept)", "MAP", "FFP", "TD", "CMD", "EMT", "Easting", "Northing", "I(Easting^2)", "I(Northing^2)", "Easting:Northing")
-coefrename <- c("Intercept", "MAP", "FFP", "TD", "CMD", "EMT", "Easting", "Northing", "Easting2", "Northing2", "EastingNorthing")
+coefnames <- c("(Intercept)", "MAP", "FFP", "TD", "CMD", "Easting", "Northing", "I(Easting^2)", "I(Northing^2)", "Easting:Northing")
+coefrename <- c("Intercept", "MAP", "FFP", "TD", "CMD", "Easting", "Northing", "Easting2", "Northing2", "EastingNorthing")
 
 #5. Set up loop-----
 for(i in 1:length(spp)){
@@ -289,7 +289,7 @@ for(i in 1:length(spp)){
 }
 
 #17. Truncate NESP climate coef because it blows up the relative abundance prediction----
-joint.n["NESP","Climate",] <- joint.n["NESP","Climate",]*0.3
+joint.n["NESP","Climate",] <- joint.n["NESP","Climate",]*0.1
 
 #LANDCOVER MODEL COEFFICIENTS - SOUTH#############
 
@@ -447,7 +447,7 @@ for(i in 1:length(spp)){
 }
 
 #17. Truncate NESP climate coef because it blows up the relative abundance prediction----
-joint.n["NESP","Climate",] <- joint.n["NESP","Climate",]*0.3
+joint.n["NESP","Climate",] <- joint.n["NESP","Climate",]*0.1
 
 #MEDIAN BOOTSTRAP SELECTION########
 
@@ -634,8 +634,8 @@ bootuse <- boots |>
 spp.remove <- c("VEER", "LEYE")
 
 #set different plot truncation quantile species
-q990 <- c("NOFL")
-q999 <- c("BLBW", "MOCH", "WCSP", "CAWA")
+q990 <- c("NOFL", "BTNW", "BLPW", "CEDW", "CMWA", "COGR", "EAPH", "HOSP", "PUFI", "SOSP", "WBNU", "YHBL", "YRWA")
+q999 <- c("BLBW", "MOCH", "WCSP")
 
 #Make the table
 birdtable <- birdnames |>

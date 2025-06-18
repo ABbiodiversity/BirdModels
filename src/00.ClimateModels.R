@@ -3,8 +3,7 @@ modelsclimate <- list(
   . ~ . + MAP,
   . ~ . + CMD,
   . ~ . + TD,
-  . ~ . + EMT,
-  . ~ . + TD + FFP + EMT,
+  . ~ . + TD + FFP,
   . ~ . + MAP + CMD,
-  . ~ . + TD + FFP + EMT + CMD,
-  . ~ . + MAP + FFP + TD + CMD + EMT)
+  . ~ . + TD + FFP + CMD,
+  . ~ . + MAP + FFP + TD + CMD)
