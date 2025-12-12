@@ -134,7 +134,9 @@ model_climate <- function(i){
     averageprediction <- inv.link(predict(averagemodel, type="link", full=TRUE))
     
     #9. Get coefficients----
-    averagecoefficients <- data.frame(coef = averagemodel$coefficients["full",])
+    averagecoefficients <- data.frame(coef = summary(averagemodel)$coefmat.full[, c("Estimate", "Std. Error")]) |> 
+      rename(coef = coef.Estimate,
+             se = coef.Std..Error)
     
     #Make a species folder in predictions
     if(!(file.exists(file.path(root, "Results", "ClimateModels", "Predictions", species.i)))){
