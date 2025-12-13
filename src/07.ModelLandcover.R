@@ -25,7 +25,7 @@ cc <- FALSE
 
 #3. Set nodes for local vs cluster----
 if(cc){ nodes <- 48}
-if(!cc | test){ nodes <- 4}
+if(!cc | test){ nodes <- 8}
 
 #4. Create and register clusters----
 print("* Creating clusters *")
@@ -164,8 +164,8 @@ model_landcover <- function(i){
   
   #18. Save the coefficients----
   coef <- data.frame(name = names(bestmodel$coefficients),
-                     value = as.numeric(bestmodel$coefficients)) |>
-    mutate(name = ifelse(name=="(Intercept)", "Intercept", name))
+                     coef = summary(bestmodel)$coefficients[, "Estimate"],
+                     se = summary(bestmodel)$coefficients[, "Std. Error"])
   
   if(region.i=="north"){ 
     
@@ -214,6 +214,7 @@ done <- data.frame(file = list.files(file.path(root, "Results", "LandCoverModels
 
 #4. Make to do list----
 loop <- anti_join(todo, done)
+loop <- todo
 
 if(nrow(loop) > 0){
   
