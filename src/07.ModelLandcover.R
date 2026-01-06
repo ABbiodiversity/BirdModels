@@ -214,7 +214,6 @@ done <- data.frame(file = list.files(file.path(root, "Results", "LandCoverModels
 
 #4. Make to do list----
 loop <- anti_join(todo, done)
-loop <- todo
 
 if(nrow(loop) > 0){
   
