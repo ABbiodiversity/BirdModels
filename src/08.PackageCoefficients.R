@@ -102,22 +102,33 @@ for(i in 1:length(spp)){
   #7. Read them in----
   #sort and fix names
   coef.list <- list()
+  se.list <- list()
   for(j in 1:nrow(climate.i)){
-    coef.list[[j]] <- read.csv(climate.i$path[j]) |>
+    coef.list[[j]] <- read.csv(climate.i$path[j]) |> 
+      dplyr::select(-se) |> 
       pivot_wider(names_from="X", values_from = "coef") |>
       dplyr::select(all_of(coefnames))
     colnames(coef.list[[j]]) <- coefrename
+    
+    se.list[[j]] <- read.csv(climate.i$path[j]) |> 
+      dplyr::select(-coef) |> 
+      pivot_wider(names_from="X", values_from = "se") |>
+      dplyr::select(all_of(coefnames))
+    colnames(se.list[[j]]) <- coefrename
   }
   
   #8. Make the array if first species----
   if(i==1){
     marginal <- array(0, c(length(spp), length(coefrename), bmax))
     dimnames(marginal) <- list(spp, coefrename, paste0("b", c(1:bmax)))
+    
+    marginal_se <- array(0, c(length(spp), length(coefrename), bmax))
+    dimnames(marginal_se) <- list(spp, coefrename, paste0("b", c(1:bmax)))
   }
   
   #9. Add species to array----
   marginal[spp[i],,] <- as.matrix(t(do.call(rbind, coef.list)))
-  
+  marginal_se[spp[i],,] <- as.matrix(t(do.call(rbind, se.list)))
   
   cat("Finished species", i, "of", length(spp), "\n")
   
@@ -159,33 +170,55 @@ for(i in 1:length(spp)){
   north.i <- dplyr::filter(north, species==spp[i])
   
   coef.list <- list()
+  se.list <- list()
   for(j in 1:nrow(north.i)){
     
     #8. Get the raw coefficients-----
     #Add zeros for any covariates that weren't in the best model
-    coef.j <- read.csv(north.i$path[j]) |>
-      mutate(name = fix_names(name)) |>
+    coef.j <- read.csv(north.i$path[j]) |> 
+      mutate(name = fix_names(name),
+             name = ifelse(name=="(Intercept)", "Intercept", name)) |>
       full_join(data.frame(name = names.north$name)) |>
-      mutate(value = ifelse(is.na(value), 0, value)) |>
+      mutate(coef = ifelse(is.na(coef), 0, coef),
+             se = ifelse(is.na(se), 0, se)) |>
       suppressMessages()
-    raw.j <- coef.j$value
+    
+    raw.j <- coef.j$coef
     names(raw.j) <- coef.j$name
+    
+    raw_se.j <- coef.j$se
+    names(raw_se.j) <- coef.j$name
     
     #9. Translate to standardized & transformed coefficients for the veg coefficients----
     mu <- drop(age %*% raw.j[colnames(age)])
     lam.j <- exp(drop(age %*% raw.j[colnames(age)]))
     
+    mu_se <- drop(age %*% raw_se.j[colnames(age)])
+    lam_se.j <- exp(drop(age %*% raw_se.j[colnames(age)]))
+    
     #10. Adjust the linear feature coefficients for competing models----
     #replace others with msoft if it is non-zero
     #because mSoft is competed with the others in the model set
     hf.j <- coef.j |>
+      dplyr::select(-se) |> 
       dplyr::filter(name %in% c("mWell", "mSoft", "mEnSft", "mTrSft", "mSeism")) |>
-      mutate(value = exp(value)) |>
-      pivot_wider(names_from=name, values_from=value) |>
+      mutate(coef = exp(coef)) |>
+      pivot_wider(names_from=name, values_from=coef) |>
       mutate(mEnSft = ifelse(mSoft!=0 & mEnSft==0, mSoft, mEnSft),
              mTrSft = ifelse(mSoft!=0 & mTrSft==0, mSoft, mTrSft),
              mSeism = ifelse(mSoft!=0 & mSeism==0, mSoft, mSeism)) |>
-      pivot_longer(mWell:mSeism, names_to="name", values_to="value") |>
+      pivot_longer(mWell:mSeism, names_to="name", values_to="coef") |>
+      data.frame()
+    
+    hf_se.j <- coef.j |>
+      dplyr::select(-coef) |> 
+      dplyr::filter(name %in% c("mWell", "mSoft", "mEnSft", "mTrSft", "mSeism")) |>
+      mutate(se = exp(se)) |>
+      pivot_wider(names_from=name, values_from=se) |>
+      mutate(mEnSft = ifelse(mSoft!=0 & mEnSft==0, mSoft, mEnSft),
+             mTrSft = ifelse(mSoft!=0 & mTrSft==0, mSoft, mTrSft),
+             mSeism = ifelse(mSoft!=0 & mSeism==0, mSoft, mSeism)) |>
+      pivot_longer(mWell:mSeism, names_to="name", values_to="se") |>
       data.frame()
     
     #11. Adjust the linear feature and well coefficients----
@@ -217,7 +250,7 @@ for(i in 1:length(spp)){
       lam.k <- exp(Xn.k %*% raw.j[colnames(Xn.k)])
       
       #Multiply transformed coefficients by those predictions and take the mean
-      vars$est[k] <- mean(lam.k * hf.j[hf.j$name==vars$var[k],]$value)
+      vars$est[k] <- mean(lam.k * hf.j[hf.j$name==vars$var[k],]$coef)
       
       #Add some extra tracking information
       vars$n[k] <- nrow(rows.k)
@@ -226,6 +259,8 @@ for(i in 1:length(spp)){
     }
     
     #12. Cap open habitat values----
+    #for coef only, not se
+    
     #Get maximum lambda for open habitat types
     lam.open <- max(lam.j[c(names(lam.j)[endsWith(names(lam.j), "R")],
                             "GrassHerb", "Shrub", "GraminoidFen", "Marsh")])
@@ -251,6 +286,9 @@ for(i in 1:length(spp)){
     linear.j <- linear$capped
     names(linear.j) <- linear$name
     
+    linear_se.j <- hf_se.j[hf_se.j$name %in% linear$var, "se"]
+    names(linear_se.j) <- linear$name
+    
     #13. Put together----
     lam.out <- c(Climate = exp(raw.j["climate"]),
                  lam.j[names(lam.j)!="Mine"],
@@ -266,6 +304,20 @@ for(i in 1:length(spp)){
     names(lam.out) <- gsub("Climate.climate", "Climate", names(lam.out))
     names(lam.out) <- gsub("TreedBog", "BlackSpruce", names(lam.out))
     
+    se.out <- c(Climate = exp(raw_se.j["climate"]),
+                lam_se.j[names(lam_se.j)!="Mine"],
+                linear_se.j,
+                HardLin = 0,
+                Water = 0,
+                Bare = 0,
+                SnowIce = 0,
+                Mine = 0,
+                MineV = unname(lam_se.j["Mine"]))
+    names(se.out) <- gsub("Spruce", "WhiteSpruce", names(se.out))
+    names(se.out) <- gsub("Decid", "Deciduous", names(se.out))
+    names(se.out) <- gsub("Climate.climate", "Climate", names(se.out))
+    names(se.out) <- gsub("TreedBog", "BlackSpruce", names(se.out))
+    
     #14. Transform back and cap values----
     lam.final <- log(lam.out)
     lam.final[lam.final > 10^4] <- 10^4
@@ -273,16 +325,25 @@ for(i in 1:length(spp)){
     
     coef.list[[j]] <- lam.final
     
+    se.final <- log(se.out)
+    se.final[is.infinite(se.final)] <- 0
+    
+    se.list[[j]] <- se.final
+    
   }
   
   #15. Make the array if first species----
   if(i==1){
     joint.n <- array(0, c(length(spp), length(coef.list[[j]]), nrow(north.i)))
     dimnames(joint.n) <- list(spp, names(coef.list[[j]]), paste0("b", c(1:nrow(north.i))))
+    
+    joint_se.n <- array(0, c(length(spp), length(se.list[[j]]), nrow(north.i)))
+    dimnames(joint_se.n) <- list(spp, names(se.list[[j]]), paste0("b", c(1:nrow(north.i)))) 
   }
   
   #16. Add species to array----
   joint.n[spp[i],,] <- as.matrix(do.call(cbind, coef.list))
+  joint_se.n[spp[i],,] <- as.matrix(do.call(cbind, se.list))
   
   cat("Finished species", i, "of", length(spp), "\n")
   
@@ -328,17 +389,24 @@ for(i in 1:length(spp)){
   south.i <- dplyr::filter(south, species==spp[i])
   
   coef.list <- list()
+  se.list <- list()
   for(j in 1:nrow(south.i)){
     
     #9. Get the raw coefficients-----
     #Add zeros for any covariates that weren't in the best model
-    coef.j <- read.csv(south.i$path[j]) |>
-      mutate(name = fix_names(name)) |>
+    coef.j <- read.csv(south.i$path[j]) |> 
+      mutate(name = fix_names(name),
+             name = ifelse(name=="(Intercept)", "Intercept", name)) |>
       full_join(data.frame(name = names.south$name)) |>
-      mutate(value = ifelse(is.na(value), 0, value)) |>
+      mutate(coef = ifelse(is.na(coef), 0, coef),
+             se = ifelse(is.na(se), 0, se)) |>
       suppressMessages()
-    raw.j <- coef.j$value
+    
+    raw.j <- coef.j$coef
     names(raw.j) <- coef.j$name
+    
+    raw_se.j <- coef.j$se
+    names(raw_se.j) <- coef.j$name
     
     #10. Transform the soil estimates and handle intercept----
     names.soil <- c("soilcBlowout", "soilcClaySub", "soilcCrop",
@@ -348,6 +416,9 @@ for(i in 1:length(spp)){
     
     lam.soil <- exp(c(raw.j[1], raw.j[1] + raw.j[names.soil]))
     names(lam.soil) <- levels(covs.s$soilc)
+    
+    lam_se.soil <- exp(c(raw_se.j[1], raw_se.j[1] + raw_se.j[names.soil]))
+    names(lam_se.soil) <- levels(covs.s$soilc)
     
     #11. Adjust the linear feature and well coefficients----
     
@@ -424,6 +495,18 @@ for(i in 1:length(spp)){
                  MineV = unname(lam.soil["Mine"]))
     names(lam.out) <- gsub("Climate.climate", "Climate", names(lam.out))
     
+    se.out <- c(Climate = exp(raw_se.j["climate"]),
+                lam_se.soil[!names(lam_se.soil) %in% c("Mine", "Water", "Wellsites")],
+                Wellsites = exp(raw_se.j["mWell"]),
+                EnSeismic = exp(raw_se.j["mSoft"]),
+                EnSoftLin = exp(raw_se.j["mSoft"]),
+                TrSoftLin = exp(raw_se.j["mSoft"]),
+                HardLin = 0,
+                Water = 0,
+                Mine = 0,
+                MineV = unname(lam_se.soil["Mine"]))
+    names(se.out) <- gsub("Climate.climate", "Climate", names(se.out))
+    
     #14. Transform back and cap values----
     lam.final <- log(lam.out)
     lam.final[lam.final > 10^4] <- 10^4
@@ -431,16 +514,25 @@ for(i in 1:length(spp)){
     
     coef.list[[j]] <- t(lam.final)
     
+    se.final <- log(se.out)
+    se.final[is.infinite(se.final)] <- 0
+    
+    se.list[[j]] <- t(se.final)
+    
   }
   
   #15. Make the array if first species----
   if(i==1){
     joint.s <- array(0, c(length(spp), length(coef.list[[j]]), nrow(south.i)))
     dimnames(joint.s) <- list(spp, names(lam.final), paste0("b", c(1:nrow(south.i))))
+    
+    joint_se.s <- array(0, c(length(spp), length(se.list[[j]]), nrow(south.i)))
+    dimnames(joint_se.s) <- list(spp, names(se.final), paste0("b", c(1:nrow(south.i)))) 
   }
   
   #16. Add species to array----
   joint.s[spp[i],,] <- as.matrix(do.call(cbind, coef.list))
+  joint_se.s[spp[i],,] <- as.matrix(do.call(cbind, se.list))
   
   cat("Finished species", i, "of", length(spp), "\n")
   
@@ -483,6 +575,7 @@ for(i in 1:nrow(todo)){
   if(region.i=="south"){coefs.i <- south.i}
   
   #5. Run an NMDS----
+  set.seed(i)
   nmds.i <- metaMDS(coefs.i, k=2, distance="euclidean", trace=0)
   
   #6. Get the site scores----
@@ -598,9 +691,15 @@ birdnames.s <- birdnames |>
 #Replace
 dimnames(marginal) <- list(birdnames.m$sppid, dimnames(marginal)[[2]], dimnames(marginal)[[3]])
 
+dimnames(marginal_se) <- list(birdnames.m$sppid, dimnames(marginal_se)[[2]], dimnames(marginal)[[3]])
+
 dimnames(joint.n) <- list(birdnames.n$sppid, dimnames(joint.n)[[2]], dimnames(marginal)[[3]])
 
+dimnames(joint_se.n) <- list(birdnames.n$sppid, dimnames(joint_se.n)[[2]], dimnames(marginal)[[3]])
+
 dimnames(joint.s) <- list(birdnames.s$sppid, dimnames(joint.s)[[2]], dimnames(marginal)[[3]])
+
+dimnames(joint_se.s) <- list(birdnames.s$sppid, dimnames(joint_se.s)[[2]], dimnames(marginal)[[3]])
 
 #2. Bird look up table-----
 
@@ -663,8 +762,8 @@ birdtable <- birdnames |>
 
 #3. Put together----
 birds <- list(
-  north = list(marginal = marginal, joint = joint.n),
-  south = list(marginal = marginal, joint = joint.s),
+  north = list(marginal = marginal, marginal_se = marginal_se, joint = joint.n, joint_se = joint_se.n),
+  south = list(marginal = marginal, marginal_se = marginal_se, joint = joint.s, joint_se = joint_se.s),
   species = birdtable
 )
 
