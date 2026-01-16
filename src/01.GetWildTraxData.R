@@ -26,7 +26,7 @@ library(data.table) #for binding lists into dataframes
 
 #2. Set root path for data on google drive----
 
-root <- "G:/My Drive/ABMI/Projects/BirdModels"
+root <- "G:/Shared drives/ABMI_RHedley/Projects/BirdModels"
 
 #3. Login to WildTrax----
 config <- "src/00.WTlogin.R"

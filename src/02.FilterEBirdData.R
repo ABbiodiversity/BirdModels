@@ -25,7 +25,7 @@ library(auk) #eBird wrangling
 
 #2. Set root path for data on google drive----
 
-root <- "G:/My Drive/ABMI/Projects/BirdModels"
+root <- "G:/Shared drives/ABMI_RHedley/Projects/BirdModels"
 
 #FILTER DATA###############
 

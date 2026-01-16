@@ -18,7 +18,7 @@ library(ebirdst) #ebird predictions
 library(auk) #ebird codes
 
 #2. Set root path for data on google drive----
-root <- "G:/Shared drives/ABMI_ECKnight/Projects/BirdModels"
+root <- "G:/Shared drives/ABMI_RHedley/Projects/BirdModels"
 
 #3. Restrict scientific notation----
 options(scipen = 99999)
