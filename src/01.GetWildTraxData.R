@@ -21,7 +21,7 @@
 #1. Load packages----
 
 library(tidyverse) #basic data wrangling
-library(wildRtrax) #to download data from wildtrax
+library(wildrtrax) #to download data from wildtrax
 library(data.table) #for binding lists into dataframes
 
 #2. Set root path for data on google drive----
@@ -31,6 +31,7 @@ root <- "G:/Shared drives/ABMI_RHedley/Projects/BirdModels"
 #3. Login to WildTrax----
 config <- "src/00.WTlogin.R"
 source(config)
+rm(config)
 
 #4. Authenticate----
 wt_auth()
@@ -39,7 +40,7 @@ wt_auth()
 
 #1. Get list of projects from WildTrax----
 #sensor = PC gives all ARU and point count projects
-projects <- wt_get_download_summary(sensor_id = 'PC')
+projects <- rbind(wt_get_projects(sensor = 'PC'), wt_get_projects(sensor = 'ARU'))
 
 #2. Filter out projects that shouldn't be used----
 #nothing in BU training & all "DO NOT USE" projects in projectInventory file
@@ -49,8 +50,10 @@ instructions <- read.csv(file.path(root, "Data", "projectInventory", "projectIns
   dplyr::filter(instruction!="ABMI ONLY")
 
 projects.use <- projects %>% 
-  dplyr::filter(organization!="BU-TRAINING",
+  dplyr::filter(organization_name!="BU-TRAINING",
                 !project_id %in% instructions$project_id)
+
+rm(instructions)
 
 #3. Loop through projects to download data----
 aru.list <- list()
@@ -62,28 +65,25 @@ for(i in 1:nrow(projects.use)){
   wt_auth()
   
   #Do each sensor type separately because the reports have different columns and we need different things for each sensor type
-  if(projects.use$sensor[i]=="ARU"){
-    
-    dat.try <- try(wt_download_report(project_id = projects.use$project_id[i], sensor_id = projects.use$sensor[i], weather_cols = F, report = "main"))
-    
-    if(class(dat.try)=="data.frame"){
-      aru.list[[i]] <- dat.try
-    }
-    
-  }
+  dat.try <- try(wt_download_report(project_id = projects.use$project_id[i], sensor_id = projects.use$project_sensor[i], reports = "main"))
   
-  if(projects.use$sensor[i]=="PC"){
-    
-    dat.try <- try(wt_download_report(project_id = projects.use$project_id[i], sensor_id = projects.use$sensor[i], weather_cols = F, report="main"))
-    
-    if(class(dat.try)=="data.frame"){
-      pc.list[[i]] <- dat.try
+  #If the function call returned a data frame, store the results, otherwise log the error.
+  if("data.frame" %in% class(dat.try)){
+    if(projects.use$project_sensor[i]=="ARU"){
+      
+      #If the sensor is an ARU, store in aru.list.
+      aru.list[[i]] <- as.data.frame(dat.try)
+      
     }
+    if(projects.use$project_sensor[i]=="PC"){
+      
+      #If the sensor is a PC, store in pc.list.
+      pc.list[[i]] <- as.data.frame(dat.try)
+      
+    }
+  } else {
     
-  }
-  
-  #Log projects that error
-  if(class(dat.try)!="data.frame"){
+    #Construct error log.
     error.log <- rbind(error.log, 
                        projects.use[i,])
     
@@ -91,6 +91,7 @@ for(i in 1:nrow(projects.use)){
   
   print(paste0("Finished dataset ", projects.use$project[i], " : ", i, " of ", nrow(projects.use), " projects"))
   
+  rm(dat.try)
 }
 
 #DEAL WITH ERRORED PROJECT############
@@ -98,7 +99,7 @@ for(i in 1:nrow(projects.use)){
 #1. Go download error projects from wildtrax.ca----
 error.log %>% 
   inner_join(projects.use %>% 
-              mutate(i = row_number())) %>% 
+               mutate(i = row_number())) %>% 
   View()
 
 #2. Read in error projects----
@@ -124,14 +125,12 @@ for(i in 1:length(error.files.pc)){
 #Take out ARU projects with "None" method
 aru.wt <- rbindlist(aru.list[], fill=TRUE)  %>% 
   rbind(aru.error, fill=TRUE) %>%
-  left_join(projects.use %>% 
-              dplyr::rename(project_status = status)) %>% 
+  left_join(projects.use) %>% 
   dplyr::filter(task_method!="None")
 
 pc.wt <- rbindlist(pc.list[], fill=TRUE)  %>% 
  rbind(pc.error, fill=TRUE) %>%
-  left_join(projects %>% 
-              dplyr::rename(project_status = status))
+  left_join(projects)
 
 #2. Save date stamped data & project list----
 save(aru.wt, pc.wt, projects.use, error.log, file=paste0(root, "/Data/WildTrax/wildtrax_raw_", Sys.Date(), ".Rdata"))
