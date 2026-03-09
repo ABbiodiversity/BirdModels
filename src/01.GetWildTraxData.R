@@ -2,6 +2,8 @@
 # title: ABMI models - get WildTRax data
 # author: Elly Knight
 # created: November 29, 2022
+# modified: March 9, 2026
+# modified by: Richard Hedley
 # ---
 
 #NOTES################################
@@ -46,12 +48,11 @@ projects <- rbind(wt_get_projects(sensor = 'PC'), wt_get_projects(sensor = 'ARU'
 #nothing in BU training & all "DO NOT USE" projects in projectInventory file
 #filter out 'NONE' method ARU projects later after this field is parsed out
 
-instructions <- read.csv(file.path(root, "Data", "projectInventory", "projectInstructions.csv")) %>%  
-  dplyr::filter(instruction!="ABMI ONLY")
+instructions <- read.csv(file.path(root, "Data", "projectInventory", "Projects_WildTrax_Use_CheckedByEMB_2026-02-15.csv")) %>%  
+  dplyr::filter(Richard.To.Use=="Yes")
 
 projects.use <- projects %>% 
-  dplyr::filter(organization_name!="BU-TRAINING",
-                !project_id %in% instructions$project_id)
+  dplyr::filter(project_id %in% instructions$project_id)
 
 rm(instructions)
 
@@ -103,7 +104,7 @@ error.log %>%
   View()
 
 #2. Read in error projects----
-error.files.aru <- list.files(file.path(root, "Data", "WildTrax", "errorFiles", "ARU"), full.names = TRUE)
+error.files.aru <- list.files(file.path(root, "Data", "WildTrax", "errorFiles", "ARU"), full.names = TRUE, pattern = '*.csv')
 
 aru.error <- data.frame()
 for(i in 1:length(error.files.aru)){
@@ -119,6 +120,11 @@ for(i in 1:length(error.files.pc)){
     rbind(pc.error)
 }
 
+#Fix issue that arises due to combining character datetimes with
+#posixct type in wt_download_report.
+aru.error$recording_date_time <- as.POSIXct(aru.error$recording_date_time)
+pc.error$recording_date_time <- as.POSIXct(pc.error$recording_date_time)
+
 #PUT TOGETHER##############
 
 #1. Collapse lists----
@@ -130,7 +136,7 @@ aru.wt <- rbindlist(aru.list[], fill=TRUE)  %>%
 
 pc.wt <- rbindlist(pc.list[], fill=TRUE)  %>% 
  rbind(pc.error, fill=TRUE) %>%
-  left_join(projects)
+  left_join(projects.use)
 
 #2. Save date stamped data & project list----
 save(aru.wt, pc.wt, projects.use, error.log, file=paste0(root, "/Data/WildTrax/wildtrax_raw_", Sys.Date(), ".Rdata"))

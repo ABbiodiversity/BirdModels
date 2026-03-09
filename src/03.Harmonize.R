@@ -32,7 +32,7 @@ library(terra) #raster wrangling
 root <- "G:/Shared drives/ABMI_RHedley/Projects/BirdModels"
 
 #3. Login to WildTrax----
-config <- "00.WTlogin.R"
+config <- "src/00.WTlogin.R"
 source(config)
 
 #4. Authenticate----
@@ -54,13 +54,15 @@ spp <- read.csv(file.path(root, "Data", "lookups", "birds-v2024.csv")) |>
   left_join(birdcodes) |> 
   mutate(species_code = case_when(common == "House Wren" ~ "HOWR",
                                   common == "Common Redpoll" ~ "CORE",
-                                  !is.na(species_code) ~ species_code))
+                                  common == "Herring Gull" ~ 'AHGU',
+                                  !is.na(species_code) ~ species_code)) |>
+  dplyr::filter(species_code != "STETRI") #Fix Wilson's Phalarope error.
 
 #2. Set desired columns----
 colnms <- c("source", "organization", "project_id", "sensor", "task_method", "location", "buffer", "latitude", "longitude", "date_time", "duration", "distance")
 
 #3. Load WildTrax data-----
-load(file.path(root, "Data", "WildTrax", "wildtrax_raw_2023-11-21.Rdata"))
+load(file.path(root, "Data", "WildTrax", "wildtrax_raw_2026-03-09.Rdata"))
 
 #4. Wrangle WT ARU data----
 #fix a few names to match the GIS
