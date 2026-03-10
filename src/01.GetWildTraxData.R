@@ -112,7 +112,7 @@ for(i in 1:length(error.files.aru)){
     rbind(aru.error)
 }
 
-error.files.pc <- list.files(file.path(root, "Data", "WildTrax", "errorFiles", "PC"), full.names = TRUE)
+error.files.pc <- list.files(file.path(root, "Data", "WildTrax", "errorFiles", "PC"), full.names = TRUE, pattern = '*.csv')
 
 pc.error <- data.frame()
 for(i in 1:length(error.files.pc)){

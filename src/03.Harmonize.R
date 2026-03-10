@@ -38,6 +38,9 @@ source(config)
 #4. Authenticate----
 wt_auth()
 
+#5. Pointer to most recent RData file:
+most_recent_file <- file.path(root, "Data", "WildTrax", "wildtrax_raw_2026-03-10.Rdata")
+
 #HARMONIZE###############################
 
 #1. Get list of bird species----
@@ -62,7 +65,7 @@ spp <- read.csv(file.path(root, "Data", "lookups", "birds-v2024.csv")) |>
 colnms <- c("source", "organization", "project_id", "sensor", "task_method", "location", "buffer", "latitude", "longitude", "date_time", "duration", "distance")
 
 #3. Load WildTrax data-----
-load(file.path(root, "Data", "WildTrax", "wildtrax_raw_2026-03-09.Rdata"))
+load(most_recent_file)
 
 #4. Wrangle WT ARU data----
 #fix a few names to match the GIS
