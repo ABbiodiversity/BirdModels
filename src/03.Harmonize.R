@@ -52,29 +52,52 @@ birdcodes <- wt_get_species() |>
                             common == "Black-crowned Night Heron" ~ "Black-crowned Night-Heron",
                             !is.na(common) ~ common))
 
-spp <- read.csv(file.path(root, "Data", "lookups", "birds-v2024.csv")) |>
-  dplyr::filter(show != "o") |> 
-  left_join(birdcodes) |> 
-  mutate(species_code = case_when(common == "House Wren" ~ "HOWR",
-                                  common == "Common Redpoll" ~ "CORE",
-                                  common == "Herring Gull" ~ 'AHGU',
-                                  !is.na(species_code) ~ species_code)) |>
-  dplyr::filter(species_code != "STETRI") #Fix Wilson's Phalarope error.
+###################################################
+# Manual step. Update the list of birds observed in the projects.
+# Specifically, there are often species splits, creating duplicates of 
+# the same species with multiple codes. Then replace the birds-vYYYY.csv file.
+# I went through and manually vetted the list, and added a preferred_synonym
+# column for species with name changes. I also removed all species
+# in birds-v2024 that had show=='o'. Those could be revisited in future and
+# added back in if their situation changes.
+###################################################
+spp <- read.csv(file.path(root, "Data", "lookups", "birds-v2026.csv")) 
+spp <- spp[order(spp$common),]
+spp <- left_join(spp, birdcodes)
+
+#Subset species with aliases due to name changes.
+aliases <- spp[nchar(spp$preferred_synonym) == 4, ]
+
+#Filter spp to remove species with aliases.
+spp <- spp[nchar(spp$preferred_synonym) != 4, ]
+
+rm(birdcodes) #birdcodes not used hereafter. In fact, now not needed at all.
 
 #2. Set desired columns----
 colnms <- c("source", "organization", "project_id", "sensor", "task_method", "location", "buffer", "latitude", "longitude", "date_time", "duration", "distance")
 
-#3. Load WildTrax data-----
+#3. Load WildTrax data and fix a few species codes-----
 load(most_recent_file)
+
+#Where a species_code exists in the data, replace with preferred_synonym.
+for(i in 1:nrow(aliases)) {
+  aru.wt$species_code[aru.wt$species_code == aliases$species_code[i]] <- aliases$preferred_synonym[i]
+  pc.wt$species_code[pc.wt$species_code == aliases$species_code[i]] <- aliases$preferred_synonym[i]
+}
 
 #4. Wrangle WT ARU data----
 #fix a few names to match the GIS
 #remove detections > 180s for hybrid method and fix duration
+#Richard added 
 use.aru <- aru.wt |> 
   dplyr::filter(!(task_method=="1SPM Audio/Visual hybrid" & as.numeric(detection_time) > 180)) |> 
   wt_tidy_species(remove=c("mammal", "amphibian", "abiotic", "insect", "human", "unknown")) |> 
+  mutate(abundance = ifelse(species_code == 'NONE', 0, abundance)) |>
+  mutate(abundance = ifelse(abundance == 'CI 1', 1, abundance)) |>
+  mutate(abundance = ifelse(abundance == 'CI 2', 1, abundance)) |>
+  mutate(abundance = ifelse(abundance == 'CI 3', 1, abundance)) |>
+  mutate(abundance = ifelse(abundance == 'N/A', 1, abundance)) |>
   wt_replace_tmtt() |>
-  mutate(species_code = ifelse(species_code=="GRAJ", "CAJA", species_code)) |> 
   wt_make_wide() |> 
   mutate(source="WildTrax",
          sensor="ARU",
@@ -84,6 +107,11 @@ use.aru <- aru.wt |>
          duration = ifelse(task_method=="1SPM Audio/Visual hybrid", 180, duration),
          location_buffer_m = ifelse(is.na(location_buffer_m), 0, location_buffer_m)) |> 
   rename(buffer = location_buffer_m)
+
+#Richard: further rounding to the nearest minute, to remove some weird task_durations.
+use.aru$task_duration <- round(use.aru$task_duration / 60) * 60
+sum(is.na(use.aru$task_duration)) #Something is messed up, introducing NAs.
+sum(is.na(aru.wt$task_duration))
 
 #5. Wrangle WT PC data----
 #remove counts with unknown duration and distance

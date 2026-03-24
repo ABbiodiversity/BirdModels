@@ -30,26 +30,16 @@ root <- "G:/Shared drives/ABMI_RHedley/Projects/BirdModels"
 #FILTER DATA###############
 
 #1. Set ebd path----
-auk_set_ebd_path(file.path(root, "Data/ebd/ebd_CA-AB_relOct-2022"), overwrite=TRUE)
+auk_set_ebd_path(file.path(root, "Data/ebd/ebd_CA-AB_smp_relJan-2026"), overwrite=TRUE)
 
 #2. Define filters----
-filters <- auk_ebd(file="ebd_CA-AB_relOct-2022.txt") %>%
+filters <- auk_ebd(file='ebd_CA-AB_smp_relJan-2026.txt') %>%
     auk_protocol("Stationary") %>%
     auk_duration(c(0, 10)) %>%
     auk_complete()
 
 #3. Filter data----
 #select columns to keep
-filtered <- auk_filter(filters, file=file.path(root, "Data/ebd_data_filtered.txt"), overwrite=TRUE,
+filtered <- auk_filter(filters, file=file.path(root, "Data/ebd/ebd_data_filtered.txt"), overwrite=TRUE,
                        keep = c("group identifier", "sampling_event_identifier", "scientific name", "common_name", "observation_count", "latitude", "longitude", "locality_type", "observation_date", "time_observations_started", "observer_id", "duration_minutes"))
 
-#Temporary: read from Elly's BAM version while I await eBird data request.
-library(sf)
-filtered <- data.table::fread(file = file.path(root, "Data/ebd/03_ebd_filtered_CA_Jan-2026.txt"))
-filtered <- st_as_sf(filtered, coords=c("LONGITUDE", "LATITUDE"), crs=4326)
-ab <- st_read(file.path(root, "Data/gis/lpr_000b21a_e.shp"))
-ab <- ab[ab$PRNAME == 'Alberta',]
-ab <- st_transform(ab, st_crs(filtered))
-filtered <- st_filter(filtered, ab)
-filtered <- st_drop_geometry(filtered)
-write.table(filtered, file.path(root, "Data/ebd/ebd_data_filtered_temp.txt"), row.names = F)
