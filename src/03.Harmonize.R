@@ -26,6 +26,12 @@ library(lubridate) #date wrangling
 library(downloader) #download zipped provincial boundary shp
 library(sf) #shapefile wrangling
 library(terra) #raster wrangling
+library(hms)
+
+#Source temp fixes for wildrtrax.
+source('temp_functions/wt_replace_tmtt_fixed.R')
+source('temp_functions/wt_tidy_species_fixed.R')
+source('temp_functions/wt_make_wide_fixed.R')
 
 #2. Set root path for data on google drive----
 
@@ -85,46 +91,51 @@ for(i in 1:nrow(aliases)) {
   pc.wt$species_code[pc.wt$species_code == aliases$species_code[i]] <- aliases$preferred_synonym[i]
 }
 
+#Set options for lubridate, to enable checking of date parsing.
+options(lubridate.verbose = TRUE)
+
 #4. Wrangle WT ARU data----
 #fix a few names to match the GIS
 #remove detections > 180s for hybrid method and fix duration
-#Richard added 
 use.aru <- aru.wt |> 
   dplyr::filter(!(task_method=="1SPM Audio/Visual hybrid" & as.numeric(detection_time) > 180)) |> 
-  wt_tidy_species(remove=c("mammal", "amphibian", "abiotic", "insect", "human", "unknown")) |> 
+  wt_tidy_species_fixed_aru(remove=c("mammal", "amphibian", "abiotic", "insect", "human", "unknown")) |> 
   mutate(abundance = ifelse(species_code == 'NONE', 0, abundance)) |>
   mutate(abundance = ifelse(abundance == 'CI 1', 1, abundance)) |>
   mutate(abundance = ifelse(abundance == 'CI 2', 1, abundance)) |>
   mutate(abundance = ifelse(abundance == 'CI 3', 1, abundance)) |>
   mutate(abundance = ifelse(abundance == 'N/A', 1, abundance)) |>
-  wt_replace_tmtt() |>
-  wt_make_wide() |> 
+  wt_replace_tmtt_fixed() |>
+  wt_make_wide_fixed() |> 
   mutate(source="WildTrax",
          sensor="ARU",
          distance=Inf,
-         date_time = ymd_hms(recording_date_time, tz="America/Edmonton"),
-         duration = round(as.numeric(str_sub(task_duration, -100, -2))),
+         date_time = ymd_hms(recording_date_time, tz="America/Edmonton", truncated=3),
+         #duration = round(as.numeric(str_sub(task_duration, -100, -2))),
+         duration = (round(task_duration / 60) * 60),
+         task_method = ifelse(is.na(task_method), 'Unknown', task_method),
          duration = ifelse(task_method=="1SPM Audio/Visual hybrid", 180, duration),
          location_buffer_m = ifelse(is.na(location_buffer_m), 0, location_buffer_m)) |> 
-  rename(buffer = location_buffer_m)
+  mutate(tod = as_hms(date_time)) |>
+  rename(buffer = location_buffer_m) |>
+  filter(duration > 0, !(duration %in% c(240, 360, 420, 480))) #Remove a few weird durations.
 
 #Richard: further rounding to the nearest minute, to remove some weird task_durations.
-use.aru$task_duration <- round(use.aru$task_duration / 60) * 60
-sum(is.na(use.aru$task_duration)) #Something is messed up, introducing NAs.
-sum(is.na(aru.wt$task_duration))
+table(use.aru$task_duration)
+table(use.aru$duration, useNA = 'always')
+
 
 #5. Wrangle WT PC data----
 #remove counts with unknown duration and distance
 use.pc <- pc.wt |> 
   dplyr::filter(survey_duration_method!="UNKNOWN",
                 survey_distance_method!="UNKNOWN") |> 
-  wt_tidy_species(remove=c("mammal", "amphibian", "abiotic", "insect", "human", "unknown")) |> 
-  mutate(species_code = ifelse(species_code=="GRAJ", "CAJA", species_code)) |> 
-  wt_make_wide() |> 
+  wt_tidy_species_fixed_pc(remove=c("mammal", "amphibian", "abiotic", "insect", "human", "unknown")) |> 
+  wt_make_wide_fixed() |> 
   mutate(source="WildTrax",
          sensor="PC",
          task_method="PC",
-         date_time = ymd_hms(survey_date, tz="America/Edmonton")) |> 
+         date_time = ymd_hms(survey_date, tz="America/Edmonton", truncated=3)) |> 
   rowwise() |>
   mutate(durationMethod = ifelse(str_sub(survey_duration_method, -1, -1)=="+",
                                  str_sub(survey_duration_method, -100, -2),
@@ -138,6 +149,9 @@ use.pc <- pc.wt |>
          distance = ifelse(distance1 %in% c("AR", "IN"), Inf, as.numeric(distance1))) |>
   ungroup() |> 
   rename(buffer = location_buffer_m)
+
+table(use.pc$survey_duration_method, useNA = 'always')
+table(use.pc$duration, useNA = 'always')
 
 #6. Wrangle Riverforks data----
 
@@ -214,7 +228,7 @@ use.ebd <- raw.ebd |>
 use <- data.table::rbindlist(list(use.aru, use.pc, use.rf, use.ebd), fill=TRUE) |> 
   dplyr::select(all_of(c(colnms, spp$species_code))) |> 
   dplyr::filter(!is.na(latitude)) |> 
-  mutate(across(c(ALFL:YRWA), replace_na, 0))
+  mutate(across(c(ALFL:YRWA), \(x) replace_na(0)))
 
 #2. Clip by provincial boundaries & filter to AB----
 
@@ -228,28 +242,12 @@ use <- data.table::rbindlist(list(use.aru, use.pc, use.rf, use.ebd), fill=TRUE) 
 shp <- read_sf(file.path(root, "Data", "gis", "lpr_000b21a_e.shp")) |> 
   dplyr::filter(PRNAME=="Alberta")
 
-#Create rasters (much faster than from polygon)
-r <- rast(ext(shp), resolution=1000, crs=crs(shp))
-ab <- rasterize(x=vect(shp), y=r, field="PRNAME")
-
-#2b. Extract raster value----
-use.ab.r <- use |> 
-  dplyr::filter(!is.na(longitude)) |> 
-  st_as_sf(coords=c("longitude", "latitude"), crs=4326) |> 
-  st_transform(crs=crs(ab)) |> 
-  vect() |> 
-  extract(x=ab) |> 
-  cbind(use |> 
-          dplyr::filter(!is.na(longitude)) |> 
-          dplyr::select(source:distance)) |> 
-  dplyr::filter(PRNAME=="Alberta") |> 
-  dplyr::select(source:distance)
-
-#2c. Apply to bird data and clip again by shp for precision
+#2b. Filter points in Alberta----
 use.ab <- use |> 
-  inner_join(unique(use.ab.r), multiple="all") |> 
-  st_as_sf(coords=c("longitude", "latitude"), crs=4326, remove=FALSE) |>  
-  st_intersection(st_transform(shp, crs=4326)) |> 
+  dplyr::filter(!is.na(longitude)) |> 
+  st_as_sf(coords=c("longitude", "latitude"), crs=4326, remove = FALSE) |> 
+  st_transform(crs=st_crs(shp)) |>
+  st_filter(st_geometry(shp)) |> 
   st_drop_geometry() |> 
   dplyr::select(colnames(use)) |> 
   rbind(use |> 
@@ -257,13 +255,83 @@ use.ab <- use |>
 
 #3. Remove duplicate surveys----
 
+#Flag column for surveys to remove.
+use.ab$remove_dup <- FALSE
+#Round lat and lon to 4 digits (11 meters at the equator, about 6 meters wide in AB).
+use.ab$latr <- round(use.ab$latitude,4)
+use.ab$lonr <- round(use.ab$longitude,4)
+#Column for unique lat/lon/date/time.
+use.ab$point_in_time <- paste(use.ab$latr, use.ab$lonr, use.ab$date_time, sep = '_')
+#Flag column for secret locations.
+use.ab$secret <- FALSE
+
+#Identify projects with at least one buffer > 0, and use that to flag secret locations.
+buffered_projects <- aggregate(buffer ~ project_id, data = use.ab, FUN = max)
+buffered_projects <- buffered_projects[buffered_projects$buffer > 0,]
+
+#use buffered projects to set secret == TRUE
+use.ab$secret[use.ab$project_id %in% buffered_projects$project_id] <- TRUE
+
+#Identify duplicates surveys (same location and date/time).
+duplicates <- table(use.ab$point_in_time)
+duplicates <- duplicates[duplicates > 1]
+
+set.seed(1234)
+for(i in 1:length(duplicates)) {
+  sub <- use.ab[use.ab$point_in_time == names(duplicates)[i],]
+  
+  # #If different surveys have different location names, flag all as secret locations.
+  # if(length(unique(sub$location)) == nrow(sub)) {
+  #   sub$secret <- TRUE
+  # } 
+  
+  #If two rows, one with ARU and PC, select ARU.
+  if(nrow(sub) == 2 & sum(sub$sensor == 'ARU') == 1 &
+     sum(sub$sensor == 'PC') == 1) {
+    sub$remove_dup[sub$sensor == 'PC'] <- TRUE
+  }
+  
+  #If the duplicates are from multiple sources, remove eBird.
+  if(length(unique(sub$source)) > 1 & 'eBird' %in% sub$source) {
+    sub$remove_dup[sub$source == 'eBird'] <- TRUE
+  }
+  
+  #If the duplicates have the same location name, select randomly among the 
+  #longest surveys.
+  if(length(unique(sub$location)) == 1) {
+    longest <- which(sub$duration == max(sub$duration))
+    selected <- sample(longest, 1)
+    sub$remove_dup <- TRUE
+    sub$remove_dup[selected] <- FALSE
+  }
+  
+  #If the above procedure has not accounted for any duplicates, a message will be printed.
+  if(sum(!sub$remove_dup) != 1 & !all(sub$secret)) {
+    #if(sum(sub$remove_dup) == 0) {
+    message(i,' Projects: ', paste(unique(sub$project_id), collapse = ' '), ' nrow: ', nrow(sub),
+            ' locations: ', paste(unique(sub$location), collapse = ' '))
+  }
+  
+  # #Otherwise select longest survey.
+  # sub <- sub[which.max(sub$duration),]
+  # 
+  # if(nrow())
+  
+}
+
+use.dup <- use.ab |> 
+  mutate(latr = round(latitude, 4),
+         lonr = round(longitude, 4)) |> 
+  group_by(date_time, latr, lonr) |> #Looking for same date_time, latr, lonr.
+  summarize(n = n()) |> 
+  ungroup()
+
 #3a. Investigate----
 #Take out buffered locations
 use.dup <- use.ab |> 
-  dplyr::filter(!is.na(longitude)) |> 
   mutate(latr = round(latitude, 4),
          lonr = round(longitude, 4)) |> 
-  group_by(date_time, latr, lonr) |> 
+  group_by(date_time, latr, lonr) |> #Looking for same date_time, latr, lonr.
   summarize(n = n()) |> 
   ungroup() |> 
   dplyr::filter(n > 1) |> 
